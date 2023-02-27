@@ -674,6 +674,30 @@ wget -q -O nematoda_odb10.gz "https://busco-data.ezlab.org/v5/data/lineages/nema
         && tar xf nematoda_odb10.gz -C busco_2022_02
 ```
 
+### Installation with Docker
+
+Both the full instalation and the docker version work when running the regular blobtool commands, so in the end I am not using the docker. In any case, here are the instructions of how to install and use an example command.
+
+With the help of Nathan Weeks in RC, get container with:
+```bash
+singularity pull --disable-cache docker://genomehubs/blobtoolkit:2.6.5
+# Test simple commands:
+singularity exec --cleanenv blobtoolkit_2.6.5.sif blobtools -h
+singularity exec --cleanenv blobtoolkit_2.6.5.sif blobtools -v
+```
+
+Example of how to run the docker version:
+```bash
+# This runs fine! meta.json has all info in config file, but is not using paths. When I try the same, but without the --taxdump argument, it fails because doesn't find taxdump…
+singularity exec --cleanenv blobtoolkit_2.6.5.sif blobtools create \
+    --threads $THREADS \
+    --fasta $DATA_DIR/Nectonema_munidae-DNA05827.fasta \
+    --meta $DATA_DIR/config.yaml \
+    --taxid 190569 \
+    --taxdump /n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/blobtoolkit/blob_databases/taxdump_2021_07 \
+    $DATA_DIR/BlobDir
+```
+
 ### Config file
 
 (This was required in the snakemake tutorial, but not using it in my current scripts)
