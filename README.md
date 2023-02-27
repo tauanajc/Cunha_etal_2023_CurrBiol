@@ -1,31 +1,17 @@
-# Cunha_etal_2023_CurrBiol
-
 This repository contains the scripts for reproducing assembly, analyses and figures from Cunha TJ, De Medeiros BAS, Lord A, Giribet G. 2023. Rampant loss of universal metazoan genes revealed by a chromosome-level genome assembly of the parasitic Nematomorpha.
 
 # Genome Assembly
 
-Folder/file structure is specific to my projects; scripts were written for a SLURM cluster controller.
+### Folder structure
 
-## Oxford Nanopore Technologies
-
-- raw data in fast5 files, which are based on open format .hdf5 (saves info on passing current)
-
-If start with a .fast5 that only has raw data, rough benchmarking suggests output basecalled file size will increase in the following fashion:
-- 1D basecalling, file size increases to roughly 4.5 times original size
-- 1D2 basecalling only produces FASTQ files, which are significantly smaller than .fast5 files
-
-## Folder structure
-
-- Raw data from MinION is kept at our INTERNAL_REPOS folder, and should not be changed.
-
-In my own holylfs folder, my genome project is called 'genomes'.<br>
-- Inside that, I keep a simple text file (spp\_names) with sample names in one column. I separate names by \_ and voucher by - (this is important for scripts that cut the folder name to find the correct folders with raw data):
+- Inside project folder, I keep a simple text file (spp\_names) with sample names in one column. I separate names by \_ and voucher by - (this is important for scripts that cut the folder name to find the correct folders with raw data):
 
 ```
-Chrysostoma_paradoxum-386252
-Cittarium_pica-384348
-Diodora_listeri-383694
+Acutogordius_australiensis-MCZ152393
+Nectonema_munidae-DNA05827
 ```
+
+For certain jobs below, the array is the line number for the species in the file spp-names. The name will be used to create new folders and file names.
 
 >- spp_names
 >- fast5_symlinks/
@@ -39,22 +25,19 @@ Diodora_listeri-383694
 >- assemblies/
 >- illumina/
 
-## Python environment
+### Python environment
 
 Create an enviroment for genome-related tools. At least some of the tools used below are for python 3.<br>
 Not everything is python-based, but some steps are, so activate enviroment in the scripts or before running programs in the command line.
 ```bash
-conda create -n genomes -c bioconda python=3 flye nanoplot filtlong trim-galore
+conda create -n genomes -c bioconda python=3 flye nanoplot
 source activate genomes
-# conda remove --name myenv --all
 # conda info --envs
 ```
 
-## SymLinks
+### SymLinks
 
-For multiple flow cells, guppy overwrites sequencing_summary file if basecalling two folders sequencially. If trying to basecall simultaneoulsy, it creates truncated lines in the summary file. Therefore, best/only way is to put all fast5 files in the same folder. But they are very heavy, so let's create symlinks to the original fast5 files in a new folder.
-
-Also, pass and fail fast5 folders in the flow cell rawdata will have identical file names. Therefore let'screate symlinks in separate pass/fail folders per species to avoid losing/overwriting files.
+For multiple ONT flow cells, put all fast5 files in the same folder as symlinks of the original files. Pass and fail fast5 folders in the flow cell rawdata will have identical file names, therefore create symlinks in separate pass/fail folders per species to avoid losing/overwriting files.
 
 - In **fast5_symlinks**:
 ```bash
@@ -64,68 +47,47 @@ cd spp_name/fast5_fail
 ln -s /FULL/PATH/TO/FAST5/FAIL/*.fast5 ./
 cd ../fast5_pass
 ln -s /FULL/PATH/TO/FAST5/PASS/*.fast5 ./
-# Instead of two folders,
-# alternative for renaming fast5_fail symlinks before creating fast5_pass symlinks:
-#for f in *.fast5; do mv "$f" "${f%.fast5}_fail.fast5"; done
 ```
 
-# Basecalling ONT with Guppy
+## Basecalling ONT with Guppy
 
-- Filtering by quality for PASS/FAIL folder: by default, MinKNOW uses Q7 (~80%), but guppy does not filter by default at all. If want that, can use a flag (below). Consider that maybe very long read is <Q7 but might be very useful for contiguity, so might want to keep that.
+Basecall ONT long reads.
 
-- Call basicalling as an array from folder **basecalled-ont**, especifying the species/voucher in the file spp-names (this name will be used to create new folders and file names):
+- From folder **basecalled-ont**:
 
 ```bash
-sbatch --array=1-3 ../../scripts/basecall.sh ../fast5-symlinks/SPECIES-FOLDER *or* data-FLOWCELLNAME
-#$1 is path to folder with all fast5 symlinks OR
-#$1 is raw data folder name inside MINION_NANOPORE folder
-#Which path depends on which fast5folder= line is valid in the slurm script below
+sbatch --array=1-2 ../../scripts/basecall.sh ../fast5-symlinks/SPECIES-FOLDER
 ```
 
 This structure allows for multiple flow cells with similar but not identical names to be basecalled into one species folder.
-
 
 ```bash
 %%bash
 #!/bin/bash
 
 #SBATCH -J Guppy                                # Job name 
-#SBATCH -o Guppy.%a.%A.out                      # File to which stdout will be written
-#SBATCH -e Guppy.%a.%A.err                      # File to which stderr will be written
-#SBATCH --mail-type=ALL                         # BEGIN,END,ALL
-#SBATCH --mail-user=tauanacunha@g.harvard.edu   # Email address
 #SBATCH --gres=gpu:1                            # Number of GPUs
 #SBATCH -t 03-00:00                             # Runtime in DD-HH:MM
-#SBATCH --mem 2000                             # Memory for all cores in Mbytes (--mem-per-cpu for MPI jobs)
-#SBATCH -p gpu                                  # Partition gpu_test (for testing), gpu
+#SBATCH --mem 3000                              # Memory for all cores in Mbytes (--mem-per-cpu for MPI jobs)
 
 module load cuda/10.1.243-fasrc01
 
 # Create variable to hold the directory name (which is the species name and voucher)
 spp_dir=$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../spp-names)
-#voucher=$(echo $spp_dir | rev | cut -d - -f1 | rev)
 
 mkdir -p $spp_dir/fastq
 
-#fast5folder=/n/holylfs/INTERNAL_REPOS/GIRIBET/MINION_NANOPORE/data-${spp_dir}
-#fast5folder=/n/holylfs/INTERNAL_REPOS/GIRIBET/MINION_NANOPORE/$1
 fast5folder=$1
 
 /n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/ont-guppy-4.5.2/bin/guppy_basecaller \
 -i $fast5folder -s $spp_dir/fastq --recursive \
 --flowcell FLO-MIN106 --kit SQK-LSK109 --compress_fastq --disable_qscore_filtering \
 --device "auto" --num_callers 8 --gpu_runners_per_device 16
-
-mv Guppy.$SLURM_ARRAY_TASK_ID.$SLURM_ARRAY_JOB_ID.* $spp_dir/
 ```
 
 - Basic options:
 
 ```bash
-# Interactive session to test:
-salloc --gres=gpu:1 -p gpu_test --mem 5000 -t 1:00:00
-# &> Guppy.10.out (to save output to file in test run)
-
 # Can see which config file is called by kit/flowcell
 guppy_basecaller --print_workflows
 
@@ -144,91 +106,67 @@ guppy_basecaller -i path/fast5folder -s path/fastqfolder
 --num_callers 8
 --gpu_runners_per_device 16
 
-# Filtering by quality score
--qscore_filtering # Default is off (older versions)
---disable_qscore_filtering
--min_qscore # Default 7
-
 --resume # If crushed and want to pick up where it left
 ```
 
-## NanoPlot visualization of raw reads
+## NanoPlot visualization of ONT raw reads
 
-- Plots for quality scores, lengths etc. of original fastq or filtered fq files.
+- Plots for quality scores, lengths etc. of fastq files.
 
 https://github.com/wdecoster/nanoplot<br>
 https://academic.oup.com/bioinformatics/article/34/15/2666/4934939
 
-- From **basecalled** or from specific **taxa_folder**:
+- From specific **taxa_folder** with basecalled data:
 
 ```bash
 salloc --gres=gpu:1 -p gpu_test --mem 1500 -t 2:00:00
 source activate genomes
 
-# From basecalled folder:
-for i in */; do
-cd $i
-
-# From inside taxa folder:
 mkdir -p nanoplot
 cd fastq
 NanoPlot --summary sequencing_summary.txt -o ../nanoplot -p $i- -f pdf --N50 -t 8 # Max plots
-cd ../../
-done
-# NanoPlot --fastq *.fastq # Alternative, less plots
 ```
 
 - Then download .html files in nanoplot folder to open in browser
 
-# Remove Illumina adapters
+## Remove Illumina adapters with TrimGalore
 
-## TrimGalore
-
-Removes adaptors and also low quality reads.
+Remove adaptors and low quality reads from Illumina short reads.
 
 http://www.bioinformatics.babraham.ac.uk/projects/trim_galore/<br>
 https://github.com/FelixKrueger/TrimGalore/blob/master/Docs/Trim_Galore_User_Guide.md
 
-- Call from **illumina** folder as
+- From **illumina** folder:
 
 ```bash
-sbatch --array=10 ../../scripts/trimgalore.sh /wholePATHtoRAWDATA/PREFIXofFILES
-# e.g. /n/Giribet_Lab/tauanajc/GASTROPODA/rawdata/2020_03-NovaSeqS4/Tauana/DNA-Acutogordius_australiensis_152393_S1_L00
+sbatch --array=1-2 ../../scripts/trimgalore.sh /wholePATHtoRAWDATA/PREFIXofFILES
+# example prefix /PATH/DNA-Acutogordius_australiensis_152393_S1_L00
 ```
-
 
 ```bash
 %%bash
 #!/bin/bash
 
 #SBATCH -J TrimG                                # Job name 
-#SBATCH -o TrimG.%a.%A.out                      # File to which stdout will be written
-#SBATCH -e TrimG.%a.%A.err                      # File to which stderr will be written
-#SBATCH --mail-type=ALL                         # BEGIN,END,ALL
-#SBATCH --mail-user=tauanacunha@g.harvard.edu   # Email address
 #SBATCH -N 1                                    # Ensure that all cores are on one machine
 #SBATCH -n 4                                    # Number of cores/cpus
 #SBATCH -t 00-08:00                             # Runtime in DD-HH:MM
 #SBATCH --mem 200                               # Memory for all cores in Mbytes (--mem-per-cpu for MPI jobs)
-#SBATCH -p shared,giribet,test                  # Partition general, serial_requeue, unrestricted, interact
 
 module load cutadapt/1.8.1-fasrc01 parallel
 
 # Create variable to hold the directory name (which is the species name) and move inside folder
 spp_dir=$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../spp-names)
-mkdir -p $spp_dir/trimG                         # Create directory for output if it is not already there
+mkdir -p $spp_dir/trimG
 cd $spp_dir/trimG
 
 parallel -j $SLURM_NTASKS ../../../../scripts/Trim_Galore/trim_galore --phred33 --gzip --length 50 --retain_unpaired --paired \
 ${1}{}_R1* ${1}{}_R2* ::: 1 2 3 4
-
-# Move .err and .out files to trimG folder with rest of output
-mv ../../TrimG.$SLURM_ARRAY_TASK_ID.* ./
 ```
 
-# Estimate genome size with Jellyfish
+## Estimate genome size with Jellyfish
 
-IDEAL IS TO DO THIS ON SHORT READS.
+Esimate genome size based on short reads.
 
 https://github.com/gmarcais/Jellyfish/tree/master/doc : Jellyfish
 
@@ -236,25 +174,19 @@ http://qb.cshl.edu/genomescope/ : Web service to estimate genome size from histo
 
 https://bioinformatics.uconn.edu/genome-size-estimation-tutorial/# : Nice tutorial
 
-- Run from **illumina** folder:
+- From **illumina** folder:
 
 ```bash
-sbatch --array=1-3 ../../scripts/jellyfish.sh
+sbatch --array=1-2 ../../scripts/jellyfish.sh
 ```
-
 
 ```bash
 %%bash
 #!/bin/bash
 
 #SBATCH -J Jellyfish                            # Job name 
-#SBATCH -o Jellyfish.%a.%A.out                  # File to which stdout will be written
-#SBATCH -e Jellyfish.%a.%A.err                  # File to which stderr will be written
-#SBATCH --mail-type=ALL                         # BEGIN,END,ALL
-#SBATCH --mail-user=tauanacunha@g.harvard.edu   # Email address
 #SBATCH -t 00-08:00                             # Runtime in DD-HH:MM
 #SBATCH --mem 15000                             # Memory for all cores in Mbytes
-#SBATCH -p test                                 # Partition
 
 module load jellyfish/2.2.5-fasrc01
 
@@ -266,19 +198,14 @@ cd $spp_dir/jellyfish
 # Count all k-mers
 ls ../trimG/*val_*.fq.gz | xargs -n 1 echo zcat > generators
 jellyfish count -C -s 2G -t 4 --disk -m 21 -Q "20" -o out21kmer.jf -g generators -G 4
-#jellyfish count -C -s 2G -t 4 --disk -m 21 -Q "5" -o out21kmer.jf <(zcat $1*.fastq.gz)
-#The command above does not use more than one thread
 
 # Make histogram
 jellyfish histo -t 8 out21kmer.jf > out21kmer-${spp_dir}.histo
-
-
-mv ../../Jellyfish.$SLURM_ARRAY_TASK_ID.* ./
 ```
 
 ```bash
-jellyfish mem -m 25 -s 1G # To see how much memory is required
-jellyfish info out25kmer.jf # To get info on the run
+jellyfish mem -m 21 -s 1G # To see how much memory is required
+jellyfish info out21kmer.jf # To get info on the run
 
 -m kmer size
 -Q (Phred score) Any base with quality below this character is changed to N
@@ -287,9 +214,7 @@ jellyfish info out25kmer.jf # To get info on the run
 -G Number of generators run simultaneously (1) (--Generators=uint32) #number of threads
 ```
 
-# Assembly of ONT data
-
-## Flye
+## Assembly of ONT data with Flye
 
 De novo assembler for single molecule sequencing reads, such as PacBio and ONT. Designed for a wide range of datasets, from small bacterial projects to large mammalian-scale assemblies. Complete pipeline: it takes raw long reads as input and outputs polished contigs.
 
