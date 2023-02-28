@@ -1,34 +1,32 @@
-This repository contains the scripts for reproducing assembly, analyses and figures from Cunha TJ, De Medeiros BAS, Lord A, Giribet G. 2023. Rampant loss of universal metazoan genes revealed by a chromosome-level genome assembly of the parasitic Nematomorpha.
+This repository contains the scripts used to assemble and analyze the genomes of two nematomorph species. The assemblies were built with ONT long reads, and Illumina whole-genome and Hi-C short reads. If you use this repository, please cite: Cunha TJ, De Medeiros BAS, Lord A, Sørensen MV, Giribet G. 2023. Rampant loss of universal metazoan genes revealed by a chromosome-level genome assembly of the parasitic Nematomorpha.
+
+Below is the pipeline used for genome assembly. Additional folders in this repository contain the final assemblies, and the R script for analyses of functional enrichment.
 
 # Genome Assembly
 
+## Setup
+
 ### Folder structure
 
-- Inside project folder, I keep a simple text file (spp\_names) with sample names in one column. I separate names by \_ and voucher by - (this is important for scripts that cut the folder name to find the correct folders with raw data):
+- Inside the project folder, I keep a simple text file (spp\_names) with sample names in one column, which are used in the scripts to call input files and name new output files/folders:
 
 ```
+# spp_names file example
 Acutogordius_australiensis-MCZ152393
-Nectonema_munidae-DNA05827
+Nectonema_munidae-MCZ153622
 ```
 
-For certain jobs below, the array is the line number for the species in the file spp-names. The name will be used to create new folders and file names.
+Example folder organization:
 
 >- spp_names
 >- fast5_symlinks/
 >- basecalled-ont/
->    - Species1_MCZ/
->        - fastq/
->        - nanoplot/
->    - Species2_MCZ/
->        - fastq/
->        - nanoplot/
 >- assemblies/
 >- illumina/
 
 ### Python environment
 
-Create an enviroment for genome-related tools. At least some of the tools used below are for python 3.<br>
-Not everything is python-based, but some steps are, so activate enviroment in the scripts or before running programs in the command line.
+Create a conda environment for genome-related tools. Activate the enviroment in the scripts or before running programs in the command line.
 ```bash
 conda create -n genomes -c bioconda python=3 flye nanoplot
 source activate genomes
@@ -49,7 +47,7 @@ cd ../fast5_pass
 ln -s /FULL/PATH/TO/FAST5/PASS/*.fast5 ./
 ```
 
-## Basecalling ONT with Guppy
+## Basecall ONT with Guppy
 
 Basecall ONT long reads.
 
@@ -61,62 +59,15 @@ sbatch --array=1-2 ../../scripts/basecall.sh ../fast5-symlinks/SPECIES-FOLDER
 
 This structure allows for multiple flow cells with similar but not identical names to be basecalled into one species folder.
 
-```bash
-%%bash
-#!/bin/bash
 
-#SBATCH -J Guppy                                # Job name 
-#SBATCH --gres=gpu:1                            # Number of GPUs
-#SBATCH -t 03-00:00                             # Runtime in DD-HH:MM
-#SBATCH --mem 3000                              # Memory for all cores in Mbytes (--mem-per-cpu for MPI jobs)
+## Visualization of ONT reads with NanoPlot
 
-module load cuda/10.1.243-fasrc01
-
-# Create variable to hold the directory name (which is the species name and voucher)
-spp_dir=$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../spp-names)
-
-mkdir -p $spp_dir/fastq
-
-fast5folder=$1
-
-/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/ont-guppy-4.5.2/bin/guppy_basecaller \
--i $fast5folder -s $spp_dir/fastq --recursive \
---flowcell FLO-MIN106 --kit SQK-LSK109 --compress_fastq --disable_qscore_filtering \
---device "auto" --num_callers 8 --gpu_runners_per_device 16
-```
-
-- Basic options:
-
-```bash
-# Can see which config file is called by kit/flowcell
-guppy_basecaller --print_workflows
-
-# Basic command:
-guppy_basecaller -i path/fast5folder -s path/fastqfolder
---flowcell FLO-MIN106 --kit SQK-LSK109 #OR
---config dna_r9.4.1_450bps_hac.cfg # HAC: high accuray mode vs. fast mode
-
--r # Recursive for folders inside the -i folder
-
-# CPU:
---num_callers # Number of files basecalling (ONT: one at a time and dedicate all processors to it)
---cpu_threads_per_caller 8 # Threads/processors available
-# GPU: for our cluster Tesla V100, according to guppy manual
---device "auto"
---num_callers 8
---gpu_runners_per_device 16
-
---resume # If crushed and want to pick up where it left
-```
-
-## NanoPlot visualization of ONT raw reads
-
-- Plots for quality scores, lengths etc. of fastq files.
+Plots for quality scores, lengths etc. of fastq files.
 
 https://github.com/wdecoster/nanoplot<br>
 https://academic.oup.com/bioinformatics/article/34/15/2666/4934939
 
-- From specific **taxa_folder** with basecalled data:
+- From specific **taxon_folder** within **basecalled-ont**:
 
 ```bash
 salloc --gres=gpu:1 -p gpu_test --mem 1500 -t 2:00:00
@@ -129,6 +80,7 @@ NanoPlot --summary sequencing_summary.txt -o ../nanoplot -p $i- -f pdf --N50 -t 
 
 - Then download .html files in nanoplot folder to open in browser
 
+
 ## Remove Illumina adapters with TrimGalore
 
 Remove adaptors and low quality reads from Illumina short reads.
@@ -140,38 +92,16 @@ https://github.com/FelixKrueger/TrimGalore/blob/master/Docs/Trim_Galore_User_Gui
 
 ```bash
 sbatch --array=1-2 ../../scripts/trimgalore.sh /wholePATHtoRAWDATA/PREFIXofFILES
-# example prefix /PATH/DNA-Acutogordius_australiensis_152393_S1_L00
+# example prefix /PATH/Acutogordius_australiensis_MCZ152393_S1_L00
 ```
 
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J TrimG                                # Job name 
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -n 4                                    # Number of cores/cpus
-#SBATCH -t 00-08:00                             # Runtime in DD-HH:MM
-#SBATCH --mem 200                               # Memory for all cores in Mbytes (--mem-per-cpu for MPI jobs)
-
-module load cutadapt/1.8.1-fasrc01 parallel
-
-# Create variable to hold the directory name (which is the species name) and move inside folder
-spp_dir=$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../spp-names)
-mkdir -p $spp_dir/trimG
-cd $spp_dir/trimG
-
-parallel -j $SLURM_NTASKS ../../../../scripts/Trim_Galore/trim_galore --phred33 --gzip --length 50 --retain_unpaired --paired \
-${1}{}_R1* ${1}{}_R2* ::: 1 2 3 4
-```
 
 ## Estimate genome size with Jellyfish
 
 Esimate genome size based on short reads.
 
-https://github.com/gmarcais/Jellyfish/tree/master/doc : Jellyfish
-
-http://qb.cshl.edu/genomescope/ : Web service to estimate genome size from histogram of hellyfish
-
+https://github.com/gmarcais/Jellyfish/tree/master/doc : Jellyfish<br>
+http://qb.cshl.edu/genomescope/ : Web service to estimate genome size from histogram of jellyfish<br>
 https://bioinformatics.uconn.edu/genome-size-estimation-tutorial/# : Nice tutorial
 
 - From **illumina** folder:
@@ -181,48 +111,20 @@ sbatch --array=1-2 ../../scripts/jellyfish.sh
 ```
 
 ```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J Jellyfish                            # Job name 
-#SBATCH -t 00-08:00                             # Runtime in DD-HH:MM
-#SBATCH --mem 15000                             # Memory for all cores in Mbytes
-
-module load jellyfish/2.2.5-fasrc01
-
-spp_dir=$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../spp-names)
-
-mkdir -p $spp_dir/jellyfish
-cd $spp_dir/jellyfish
-
-# Count all k-mers
-ls ../trimG/*val_*.fq.gz | xargs -n 1 echo zcat > generators
-jellyfish count -C -s 2G -t 4 --disk -m 21 -Q "20" -o out21kmer.jf -g generators -G 4
-
-# Make histogram
-jellyfish histo -t 8 out21kmer.jf > out21kmer-${spp_dir}.histo
-```
-
-```bash
 jellyfish mem -m 21 -s 1G # To see how much memory is required
 jellyfish info out21kmer.jf # To get info on the run
-
--m kmer size
--Q (Phred score) Any base with quality below this character is changed to N
--C Count both strand, canonical representation (false) (--canonical)
--g File of commands generating fast[aq] (--generator=path)
--G Number of generators run simultaneously (1) (--Generators=uint32) #number of threads
 ```
 
-## Assembly of ONT data with Flye
+
+## Genome assembly of ONT data with Flye
 
 https://github.com/fenderglass/Flye
 
 Flye was primarily developed to run on base-called raw reads and does not require any prior error correction. Flye automatically detects chimeric reads or reads with low quality ends, so you do not need to curate them before the assembly.
 
-Input reads can be in FASTA or FASTQ format. You may specify multiple files with reads (separated by spaces).
+Input reads can be in FASTA or FASTQ format. You may specify multiple files (separated by spaces).
 
-Polishing is performed as the final assembly stage. By default, Flye runs one polishing iteration. Additional iterations might correct a small number of extra errors (due to improvements on how reads may align to the corrected assembly).
+Polishing is performed as the final assembly stage. By default, Flye runs one polishing iteration.
 
 - In **assemblies** folder: (output folder name can be edited inside script)
 
@@ -230,30 +132,9 @@ Polishing is performed as the final assembly stage. By default, Flye runs one po
 sbatch --array=1 ../../scripts/flye.sh PATH_TO_FASTQ_FOLDER
 ```
 
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J flye                                 # Job name 
-#SBATCH -n 32                                   # Number of cores
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -t 2-00:00                              # Runtime in DD-HH:MM
-#SBATCH --mem 184G                              # Memory for all cores in Mbytes
-
-source activate genomes
-
-spp_dir=$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../spp-names)
-outfolder=flye
-
-cd $spp_dir
-
-flye --nano-raw ../$1/*.fastq.gz --out-dir $outfolder --threads $SLURM_NTASKS
-```
-
 Main output files are:
 
 - assembly.fasta - Final assembly. Contains contigs and possibly scaffolds (see below).
-- assembly_graph.{gfa|gv} - Final repeat graph. Note that the edge sequences might be different (shorter) than contig sequences, because contigs might include multiple graph edges (see below).
 - assembly_info.txt - Tab-delimited table with extra information about contigs. Columns as follows:
 
     - Contig/scaffold id
@@ -267,6 +148,7 @@ Main output files are:
     - Scaffold gaps are marked with ?? symbols, and * symbol denotes a terminal graph node.
 
 Alternative contigs (representing alternative haplotypes) will have the same alt. group ID. Primary contigs are marked by *
+
 
 ## Polishing with long reads
 
@@ -283,59 +165,20 @@ Make an index file from the assembly, then run mapping.
 sbatch PATH_SCRIPTS/bwa-index.sh <assembly-file>
 ```
 
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J bwaIndex                             # Job name 
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -n 1                                    # Number of cores/cpus
-#SBATCH -t 00-00:30                             # Runtime in DD-HH:MM
-#SBATCH --mem 200                               # Memory for all cores in Mbytes (--mem-per-cpu for MPI jobs)
-
-module load bwa/0.7.17-fasrc01
-
-mkdir -p bwa-index
-
-bwa index -p bwa-index $1
-mv bwa-index.* bwa-index/
+Then:
+```
+sbatch --array=1 PATH_SCRIPTS/bwa-map.sh
 ```
 
-- From specific assembly folder (e.g. SPP_FOLDER/flye):
-```
-sbatch --array=8 PATH_SCRIPTS/bwa-map.sh
-```
-
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J bwaMap                               # Job name 
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -n 16                                   # Number of cores/cpus
-#SBATCH -t 00-08:00                             # Runtime in DD-HH:MM
-#SBATCH --mem 1000                              # Memory for all cores in Mbytes (--mem-per-cpu for MPI jobs)
-
-module load bwa/0.7.17-fasrc01
-
-spp_dir=$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../spp-names)
-ont=$SCRATCH/giribet_lab/Users/tauanajc/${spp_dir}_ont.fastq.gz
-
-mkdir -p bwa-mapping
-
-bwa mem -t $SLURM_NTASKS -x ont2d \
-bwa-index/bwa-index $ont > bwa-mapping/mapping.sam
-```
 
 ### Racon
 
-Intended as a standalone consensus module to correct raw contigs generated by rapid assembly methods which do not include a consensus step.
-
 https://github.com/lbcb-sci/racon
 
+Intended as a standalone consensus module to correct raw contigs generated by rapid assembly methods which do not include a consensus step.<br>
 Racon takes as input only three files: contigs in FASTA/FASTQ format, reads in FASTA/FASTQ format, and alignments between the reads and the contigs in MHAP/PAF/SAM format. Output is a set of polished contigs in FASTA format printed to stdout. All input files can be compressed with gzip (which will have impact on parsing time).
 
-The step below, medaka, was trained with non-default parameters of racon, so we set the same parameters to have similar error profiles. The effect of deviating from this prescription has not been explored with recent basecallers, and it may well be the case that medaka is not overly sensitive to changes to these values ([reference]((https://nanoporetech.github.io/medaka/draft_origin.html#recommendations)).
+The step below, medaka, was trained with non-default parameters of racon, so we set the same parameters to have similar error profiles. The effect of deviating from this prescription has not been explored with recent basecallers, and it may well be the case that medaka is not overly sensitive to changes to these values ([reference](https://nanoporetech.github.io/medaka/draft_origin.html#recommendations)).
 
 - In specific assembly folder:
 
@@ -344,32 +187,12 @@ sbatch --array=1 PATH_TO_scripts/racon.sh <assembly-file>
 # Less than 10 min on Acutogordius flye assembly
 ```
 
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J Racon                                # Job name 
-#SBATCH -n 16                                   # Number of cores
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -t 0-03:00                              # Runtime in DD-HH:MM
-#SBATCH --mem 60G                               # Memory for all cores in Mbytes
-
-spp_dir=$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../../../spp-names)
-
-ont=$SCRATCH/giribet_lab/Users/tauanajc/${spp_dir}_ont.fastq.gz
-
-mkdir -p racon
-
-/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/racon/build/bin/racon -t $SLURM_NTASKS \
--m 8 -x -6 -g -8 -w 500 \ # non-default parameter values used to train medaka
-$ont bwa-mapping/mapping.sam $1 > racon/racon.fasta
-```
 
 ### Medaka
 
-Tool to create consensus sequences and variant calls from nanopore data. This task is performed using neural networks applied a pileup of individual sequencing reads against a draft assembly.
-
 https://github.com/nanoporetech/medaka
+
+Tool to create consensus sequences and variant calls from nanopore data. This task is performed using neural networks applied a pileup of individual sequencing reads against a draft assembly.
 
 ```bash
 # create new environment with latest medaka
@@ -383,26 +206,6 @@ As input medaka accepts reads in either .fasta or .fastq. It requires a draft as
 sbatch --array=1 ../../../../scripts/medaka.sh racon/racon.fasta
 ```
 
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J Medaka                               # Job name 
-#SBATCH -n 16                                   # Number of cores
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -t 0-08:00                              # Runtime in DD-HH:MM
-#SBATCH --mem 100G                              # Memory for all cores in Mbytes
-
-source activate medaka
-
-spp_dir=$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../../../spp-names)
-
-ont=$SCRATCH/giribet_lab/Users/tauanajc/${spp_dir}_ont.fastq.gz
-DRAFT=$1
-OUTDIR=medaka
-
-medaka_consensus -i $ont -d ${DRAFT} -o ${OUTDIR} -t $SLURM_NTASKS -m r941_min_high_g360
-```
 
 ## purge_dups
 
@@ -412,10 +215,11 @@ https://github.com/dfguan/purge_dups
 
 Install purge_dups from the github, and minimap2 with bioconda:
 ```bash
+source activate genomes
 conda install -c bioconda minimap2 
 ```
 
-There are 4 steps described in this [Pipeline Guide](https://github.com/dfguan/purge_dups#--pipeline-guide): "Steps with same number can be run simultaneously. Among all the steps, although step 4 is optional, we highly recommend our users to do so, because assemblers may produce overrepresented sequeences. In such a case, the final step 4 can be applied to remove those seqeuences."
+There are 4 steps described in this [Pipeline Guide](https://github.com/dfguan/purge_dups#--pipeline-guide): "Steps with same number can be run simultaneously. Among all the steps, although step 4 is optional, we highly recommend our users to do so, because assemblers may produce overrepresented sequences. In such a case, the final step 4 can be applied to remove those sequences."
 
 Step 1: Run minimap2 to align ont data and generate paf files, then calculate read depth histogram and base-level read depth.
 
@@ -426,66 +230,20 @@ Step 2: Purge haplotigs and overlaps.
 Step 3: Get purged primary and haplotig sequences from draft assembly.
 <br>Notice this command will only remove haplotypic duplications at the ends of the contigs. If you also want to remove the duplications in the middle, please remove -e option at your own risk, it may delete false positive duplications.
 
-(Step 4: Merge hap.fa and \$hap_asm and redo the above steps to get a decent haplotig set. - These instructions are not clear, $hap_asm is an alternative assembly I think, but what would that be? And how exactly to proceed? I'm considering I don't have an alternative assembly. If the BUSCO of the final purged.fa output from step 3 is good, then don't even worry about this)
+purge_dups limitation:
+<br>Read depth cutoffs calculation: the coverage cutoffs can be larger for a low heterozygosity species, which causes the purged assembly size smaller than expected. In such a case, please use script/hist_plot.py to make the histogram plot and set coverage cutoffs manually.
+
+The last command of the script produces a coverage plot that can be used to validate the cutoff values.
 
 - In specific assembly folder:
 ```bash
 sbatch --array=1 ../../../../scripts/purgedups.sh medaka/consensus.fasta
 ```
 
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J PurgeDups                            # Job name 
-#SBATCH -n 32                                   # Number of cores
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -t 0-02:00                              # Runtime in DD-HH:MM
-#SBATCH --mem 10000                             # Memory for all cores in Mbytes
-
-source activate genomes
-
-spp_dir=$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../../../spp-names)
-
-ont=$SCRATCH/giribet_lab/Users/tauanajc/${spp_dir}_ont.fastq.gz
-ASSEMBLY=$1
-
-mkdir -p purge_dups
-cd purge_dups
-
-##### STEP 1 #####
-minimap2 -x map-ont ../$ASSEMBLY $ont -t $SLURM_NTASKS | gzip -c - > mini2-reads.paf.gz
-
-/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/purge_dups/bin/pbcstat *.paf.gz
-    # produces PB.base.cov and PB.stat files
-/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/purge_dups/bin/calcuts \
-PB.stat > cutoffs 2>calcults.log
-
-##### STEP 1 #####
-/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/purge_dups/bin/split_fa ../$ASSEMBLY > assembly.split
-
-minimap2 -x asm5 -DP assembly.split assembly.split -t $SLURM_NTASKS | gzip -c - > assembly.split.self.paf.gz
-
-##### STEP 2 #####
-/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/purge_dups/bin/purge_dups -2 \
--T cutoffs -c PB.base.cov assembly.split.self.paf.gz > dups.bed 2> purge_dups.log
-
-##### STEP 3 #####
-/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/purge_dups/bin/get_seqs -e dups.bed ../$ASSEMBLY
-
-##### coverage distribution #####
-/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/purge_dups/scripts/hist_plot.py \
--c cutoffs PB.stat hist.pdf
-```
-
-purge_dups limitation:
-<br>Read depth cutoffs calculation: the coverage cutoffs can be larger for a low heterozygosity species, which causes the purged assembly size smaller than expected. In such a case, please use script/hist_plot.py to make the histogram plot and set coverage cutoffs manually.
-
-The last command of the script produces a coverage plot that can be used to validate the cutoff values.
 
 ## Polishing with short reads - HyPo
 
-Hybrid Polisher, uses short (as well as long reads) within a single run to polish a long reads assembly of small and large genomes.
+Hybrid Polisher, uses short reads within a single run to polish a long reads assembly of small and large genomes. The requirement is that those reads should be highly accurate (>98% accuracy).
 
 https://github.com/kensung-lab/hypo
 
@@ -493,8 +251,6 @@ https://github.com/kensung-lab/hypo
 # install from bioconda in new python env
 conda create -n hypo -c conda-forge -c bioconda python=3 hypo minimap2 samtools bedtools
 ```
-
-"short reads" doesn't necessarily have to be NGS short reads; HiFi genomic reads (e.g. CCS) like those generated from PacBio SequelII could also be used instead. The requirement is that those reads should be highly accurate (>98% accuracy).
 
 Required input:
 
@@ -504,8 +260,6 @@ Short reads (in FASTA/FASTQ format; can be compressed)
 <br>If long (noisy) reads are also to be used for polishing, then alignments between long reads and the draft (in sam/bam format; should contain CIGAR)
 <br>Expected mean coverage of short reads and approximate size of the genome
 
-Hypo (conceptually) divides a draft (uncorrected) contig into two types of regions (segments): Strong and Weak. Strong regions are those which have strong evidence (support) of their correctness and thus do not need polishing. Weak regions, on the other hand, will be polished using POA. Each weak region will be polished using either short reads or long reads; short reads taking precedence over long reads. To identify strong regions, we make use of solid kmers (expected unique genomic kmers). Strong regions also play a role in selecting the read-segments to polish their neighbouring weak regions. Furthermore, the approach takes into account that the long reads and thus the assemblies generated from them are prone to homopolymer errors.
-
 From Ritu-Kundu in a github issue: "Hypo currently doesn't use paired-end info for short reads and treat them as individual reads. It means that HiSeq2500 and linked reads can be combined together as short reads input with their coverage set as the combined coverage. As for cleaning, it is usually a good idea to clean the Illumina reads before using them in any downstream analysis. If one has error-corrected reads available, we would recommend using them but it is not a pre-requisite as such.
 There is absolutely no need to merge the paired-end reads for Hypo."
 
@@ -514,52 +268,6 @@ There is absolutely no need to merge the paired-end reads for Hypo."
 sbatch --array=1 ../../../../scripts/hypo.sh 173m
 ```
 
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J HyPo                                 # Job name 
-#SBATCH -n 32                                   # Number of cores
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -t 0-08:00                              # Runtime in DD-HH:MM
-#SBATCH --mem 184G                              # Memory for all cores in Mbytes
-
-source activate hypo
-
-spp_dir=$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../../../spp-names)
-
-illumina1=$SCRATCH/giribet_lab/Users/tauanajc/${spp_dir}_illumina1.fastq.gz
-illumina2=$SCRATCH/giribet_lab/Users/tauanajc/${spp_dir}_illumina2.fastq.gz
-ont=$SCRATCH/giribet_lab/Users/tauanajc/${spp_dir}_ont.fastq.gz
-DRAFT=purge_dups/purged.fa
-genomesize=$1
-
-mkdir -p hypo
-cd hypo
-
-##### Mapping the short reads to contigs #####
-minimap2 --secondary=no --MD -ax sr -t $SLURM_NTASKS \
-../$DRAFT $illumina1 $illumina2 | samtools view -Sb - > mapped-sr.bam
-
-samtools sort -@$SLURM_NTASKS -o mapped-sr.sorted.bam mapped-sr.bam
-samtools index mapped-sr.sorted.bam
-rm mapped-sr.bam
-
-##### HyPo #####
-echo -e "$illumina1\n$illumina2" > illumina_file_names.txt
-samtools depth -a mapped-sr.sorted.bam > coverage.txt
-coverage=$(cat coverage.txt | awk '{ sum+=$3 } END { printf "%.0f", sum/NR }')
-
-hypo -d ../$DRAFT -r @illumina_file_names.txt -s $genomesize -c $coverage \
--b mapped-sr.sorted.bam -t $SLURM_NTASKS -o whole_genome.h.fa
-```
-
-Alternative way to calculate coverage:
-<br>(result different by very little compared to samtools command above, don't know exactly why)
-```bash
-bedtools genomecov -ibam mapped-sr.sorted.bam -bga -split > CoverageTotal.bedgraph
-coverage=$(cat CoverageTotal.bedgraph | awk '{ $5 = $3 - $2; $6 = $4 * $5; size+=$5; cov+=$6} END { print cov/size }')
-```
 
 ## Check contamination with BlobTools
 
