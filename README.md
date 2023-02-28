@@ -1,6 +1,9 @@
-This repository contains the scripts used to assemble and analyze the genomes of two nematomorph species. The assemblies were built with ONT long reads, and Illumina whole-genome and Hi-C short reads. If you use this repository, please cite: Cunha TJ, De Medeiros BAS, Lord A, Sørensen MV, Giribet G. 2023. Rampant loss of universal metazoan genes revealed by a chromosome-level genome assembly of the parasitic Nematomorpha.
+This repository contains the scripts used to assemble and analyze the genomes of two nematomorph species. The assemblies were built with ONT long reads, and Illumina whole-genome and Hi-C short reads. If you use this repository, please cite:
 
-Below is the pipeline used for genome assembly. Additional folders in this repository contain the final assemblies, and the R script for analyses of functional enrichment.
+Cunha TJ, De Medeiros BAS, Lord A, Sørensen MV, Giribet G. 2023. Rampant loss of universal metazoan genes revealed by a chromosome-level genome assembly of the parasitic Nematomorpha.
+
+Below is the pipeline used for genome assembly, with reference links to software and information. Additional folders in this repository contain the final assemblies, and the R script for analyses of functional enrichment.
+
 
 # Genome Assembly
 
@@ -21,8 +24,8 @@ Example folder organization:
 >- spp_names
 >- fast5_symlinks/
 >- basecalled-ont/
->- assemblies/
 >- illumina/
+>- assemblies/
 
 ### Python environment
 
@@ -47,6 +50,7 @@ cd ../fast5_pass
 ln -s /FULL/PATH/TO/FAST5/PASS/*.fast5 ./
 ```
 
+
 ## Basecall ONT with Guppy
 
 Basecall ONT long reads.
@@ -54,7 +58,7 @@ Basecall ONT long reads.
 - From folder **basecalled-ont**:
 
 ```bash
-sbatch --array=1-2 ../../scripts/basecall.sh ../fast5-symlinks/SPECIES-FOLDER
+sbatch --array=1 ../../scripts/basecall.sh ../fast5-symlinks/SPECIES-FOLDER
 ```
 
 This structure allows for multiple flow cells with similar but not identical names to be basecalled into one species folder.
@@ -78,7 +82,7 @@ cd fastq
 NanoPlot --summary sequencing_summary.txt -o ../nanoplot -p $i- -f pdf --N50 -t 8 # Max plots
 ```
 
-- Then download .html files in nanoplot folder to open in browser
+Then download .html files in nanoplot folder to open in browser
 
 
 ## Remove Illumina adapters with TrimGalore
@@ -91,7 +95,7 @@ https://github.com/FelixKrueger/TrimGalore/blob/master/Docs/Trim_Galore_User_Gui
 - From **illumina** folder:
 
 ```bash
-sbatch --array=1-2 ../../scripts/trimgalore.sh /wholePATHtoRAWDATA/PREFIXofFILES
+sbatch --array=1 ../../scripts/trimgalore.sh /wholePATHtoRAWDATA/PREFIXofFILES
 # example prefix /PATH/Acutogordius_australiensis_MCZ152393_S1_L00
 ```
 
@@ -107,12 +111,7 @@ https://bioinformatics.uconn.edu/genome-size-estimation-tutorial/# : Nice tutori
 - From **illumina** folder:
 
 ```bash
-sbatch --array=1-2 ../../scripts/jellyfish.sh
-```
-
-```bash
-jellyfish mem -m 21 -s 1G # To see how much memory is required
-jellyfish info out21kmer.jf # To get info on the run
+sbatch --array=1 ../../scripts/jellyfish.sh
 ```
 
 
@@ -150,7 +149,7 @@ Main output files are:
 Alternative contigs (representing alternative haplotypes) will have the same alt. group ID. Primary contigs are marked by *
 
 
-## Polishing with long reads
+## Polish with long reads
 
 ### BWA mapping
 
@@ -160,7 +159,7 @@ https://github.com/lh3/bwa#type
 
 Make an index file from the assembly, then run mapping.
 
-- From specific assembly folder (e.g. SPP_FOLDER/flye):
+- From specific assembly folder (**assemblies/spp_folder/flye**):
 ```
 sbatch PATH_SCRIPTS/bwa-index.sh <assembly-file>
 ```
@@ -180,7 +179,7 @@ Racon takes as input only three files: contigs in FASTA/FASTQ format, reads in F
 
 The step below, medaka, was trained with non-default parameters of racon, so we set the same parameters to have similar error profiles. The effect of deviating from this prescription has not been explored with recent basecallers, and it may well be the case that medaka is not overly sensitive to changes to these values ([reference](https://nanoporetech.github.io/medaka/draft_origin.html#recommendations)).
 
-- In specific assembly folder:
+- In specific assembly folder (**assemblies/spp_folder/flye**):
 
 ```bash
 sbatch --array=1 PATH_TO_scripts/racon.sh <assembly-file>
@@ -201,13 +200,13 @@ conda create -n medaka -c conda-forge -c bioconda "python=3.8" "medaka=1.3.2"
 
 As input medaka accepts reads in either .fasta or .fastq. It requires a draft assembly as a .fasta (e.g. directly from assembler or after racon). The model parameter should be updated as needed (see [medaka details](https://github.com/nanoporetech/medaka#models)), especially note if there is a more recent guppy version specification.
 
-- In specific assembly folder:
+- In specific assembly folder (**assemblies/spp_folder/flye**):
 ```bash
 sbatch --array=1 ../../../../scripts/medaka.sh racon/racon.fasta
 ```
 
 
-## purge_dups
+## Remove haplotigs with purge_dups
 
 Filter to eliminate haplotigs and contig overlaps from a de novo assembly based on read depth.
 
@@ -219,7 +218,7 @@ source activate genomes
 conda install -c bioconda minimap2 
 ```
 
-There are 4 steps described in this [Pipeline Guide](https://github.com/dfguan/purge_dups#--pipeline-guide): "Steps with same number can be run simultaneously. Among all the steps, although step 4 is optional, we highly recommend our users to do so, because assemblers may produce overrepresented sequences. In such a case, the final step 4 can be applied to remove those sequences."
+[Pipeline Guide](https://github.com/dfguan/purge_dups#--pipeline-guide):
 
 Step 1: Run minimap2 to align ont data and generate paf files, then calculate read depth histogram and base-level read depth.
 
@@ -235,13 +234,13 @@ purge_dups limitation:
 
 The last command of the script produces a coverage plot that can be used to validate the cutoff values.
 
-- In specific assembly folder:
+- In specific assembly folder (**assemblies/spp_folder/flye**):
 ```bash
 sbatch --array=1 ../../../../scripts/purgedups.sh medaka/consensus.fasta
 ```
 
 
-## Polishing with short reads - HyPo
+## Polish with short reads - HyPo
 
 Hybrid Polisher, uses short reads within a single run to polish a long reads assembly of small and large genomes. The requirement is that those reads should be highly accurate (>98% accuracy).
 
@@ -263,36 +262,31 @@ Short reads (in FASTA/FASTQ format; can be compressed)
 From Ritu-Kundu in a github issue: "Hypo currently doesn't use paired-end info for short reads and treat them as individual reads. It means that HiSeq2500 and linked reads can be combined together as short reads input with their coverage set as the combined coverage. As for cleaning, it is usually a good idea to clean the Illumina reads before using them in any downstream analysis. If one has error-corrected reads available, we would recommend using them but it is not a pre-requisite as such.
 There is absolutely no need to merge the paired-end reads for Hypo."
 
-- From specific assembly folder:
+- From specific assembly folder (**assemblies/spp_folder/flye**):
 ```bash
-sbatch --array=1 ../../../../scripts/hypo.sh 173m
+sbatch --array=1 ../../../../scripts/hypo.sh 173m # estimated genome size from GenomeScope
 ```
 
 
 ## Check contamination with BlobTools
 
-Sujai Kumar gave a short workshop on using the BlobTools viewer for the genomics-mgig group (slack).
-<br>Slides: https://tiny.cc/btk-molluscs
-<br>Viewer: https://blobtoolkit.genomehubs.org
-<br>Recording: https://www.youtube.com/watch?v=Lw3WaGpSEFM
-<br>Then on how to build blobtools for your data - tutorial: https://github.com/blobtoolkit/tutorials/blob/main/2021-04-28_blobtoolkit_commandline_mollusc.md <br>Workshop video: https://www.youtube.com/watch?v=SuKBKEH0cMA
-<br>But the snakemake pipeline he uses did not work for me, probably some broken path in the minimap commands when I give both Illumina and ONT reads. So in the end, I am following the original BlobTools2 tutorial: https://blobtoolkit.genomehubs.org/blobtools2/blobtools2-tutorials/getting-started-with-blobtools2/
+BlobTools2 tutorial: https://blobtoolkit.genomehubs.org/blobtools2/blobtools2-tutorials/getting-started-with-blobtools2/
 
 ### Installation BlobTools2
 
-Installation commands are mostly the same as in Kumar's tutorial above, except that I create one environment for mamba and then use it to install the other packages in the same env:
+I found it easier/faster to create one environment for mamba and then use it to install the other packages in the same env:
 
 - In home folder, install python dependencies:
 
 ```bash
-module load tools/python/3.7 #module load Anaconda3/2020.11
+module load Anaconda3/2020.11
 conda create -n blob -c conda-forge python=3.8 mamba
 source activate blob
 
 mamba install -c conda-forge -c bioconda -c tolkit aria2==1.34.0 busco==5.1.2 defusedxml==0.7.1 diamond==2.0.8 docopt==0.6.2 geckodriver==0.29.0 minimap2==2.17 mosdepth==0.2.9 nodejs==14.14.0 parallel pip==21.0.1 psutil==5.8.0 pysam==0.16.0.1 pyvirtualdisplay==2.1 pyyaml==5.4.1 samtools==1.10 selenium==3.141.0 seqtk==1.3 snakemake==6.0.5 tolkein==0.2.6 tqdm==4.59.0 ujson==4.0.2 urllib3==1.26.3
 ```
 
-- In holylfs scripts folder, install blobtoolkit:
+- In my usual scripts folder, install blobtoolkit:
 
 ```bash
 VERSION=release/v2.5.0
@@ -302,15 +296,9 @@ git clone -b $VERSION https://github.com/blobtoolkit/blobtools2
 git clone -b $VERSION https://github.com/blobtoolkit/specification
 git clone -b $VERSION https://github.com/blobtoolkit/pipeline
 git clone -b $VERSION https://github.com/blobtoolkit/viewer
-
-#either run this before using blobtools functions, or put in .bashrc
-#but I have not been doing this
-export PATH=/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/blobtoolkit/blobtools2:/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/blobtoolkit/specification:/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/blobtoolkit/insdc-pipeline/scripts:$PATH
-#export PATH=~/scripts/blobtoolkit/blobtools2:~/scripts/blobtoolkit/specification:~/scripts/blobtoolkit/insdc-pipeline/scripts:$PATH
 ```
 
-- In blobtools folder, install databases:
-
+- In scripts/blobtoolkit folder, install databases:
 
 1- Download the NCBI taxdump:
 
@@ -384,9 +372,9 @@ wget -q -O nematoda_odb10.gz "https://busco-data.ezlab.org/v5/data/lineages/nema
 
 ### Installation with Docker
 
-Both the full instalation and the docker version work when running the regular blobtool commands, so in the end I am not using the docker. In any case, here are the instructions of how to install and use an example command.
+Both the full instalation above and the docker version work when running the regular blobtool commands. I only used the docker for the View Blob step below. In any case, here are the instructions of how to install and use an example command.
 
-With the help of Nathan Weeks in RC, get container with:
+On Harvard Cannon cluster, get container with:
 ```bash
 singularity pull --disable-cache docker://genomehubs/blobtoolkit:2.6.5
 # Test simple commands:
@@ -406,213 +394,32 @@ singularity exec --cleanenv blobtoolkit_2.6.5.sif blobtools create \
     $DATA_DIR/BlobDir
 ```
 
-### Config file
-
-(This was required in the snakemake tutorial, but not using it in my current scripts)
-
-- Create yaml config file. It has 6 sessions: `assembly`, `busco`, `reads`, `settings`, `similarity`, `taxon` and `keep_intermediates`.
-
-To see what are the available [busco](https://busco.ezlab.org/busco_userguide.html) datasets:
-```bash
-busco --list-datasets
-```
-
 ### Build up BlobDir
 
 Before running blobtools, need to map reads to assembly, get blast hits and diamond hits. The following scripts can be run in parallel, and they create the necessary input files to run blobtools right after, adding all these data to the BlobDir.
 
-From specific assembly folder, e.g. Nectonema flye folder:
+From specific assembly folder (**assemblies/spp_folder/flye**):
 ```bash
 sbatch --array=1 ../../../../scripts/blob-blast.sh
 sbatch --array=1 ../../../../scripts/blob-diamond.sh
 sbatch --array=1 ../../../../scripts/blob-mapILL.sh
 sbatch --array=1 ../../../../scripts/blob-mapONT.sh
-sbatch --array=1 ../../../../scripts/blob-busco.sh nematoda_odb10
-#metazoa_odb10 arthropoda_odb10 eukaryota_odb10
-```
-
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J blob-blast                           # Job name 
-#SBATCH -n 16                                   # Number of cores
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -t 2-00:00                              # Runtime in DD-HH:MM
-#SBATCH --mem 100G                              # Memory for all cores in Mbytes
-
-module load Anaconda3/2020.11
-source activate blob
-
-mkdir -p blobtools
-
-blastn -db /n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/blobtoolkit/blob_databases/nt_2021_07/nt \
-       -num_threads $SLURM_NTASKS \
-       -query hypo/whole_genome.h.fa \
-       -outfmt "6 qseqid staxids bitscore std" \
-       -max_target_seqs 10 \
-       -max_hsps 1 \
-       -evalue 1e-25 \
-       -out blobtools/blast.out
-```
-
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J blob-diamond                         # Job name 
-#SBATCH -n 16                                   # Number of cores
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -t 0-08:00                              # Runtime in DD-HH:MM
-#SBATCH --mem 15G                               # Memory for all cores in Mbytes
-
-module load Anaconda3/2020.11
-source activate blob
-
-mkdir -p blobtools
-
-diamond blastx \
-        --query hypo/whole_genome.h.fa \
-        --db /n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/blobtoolkit/blob_databases/uniprot_2021_07/reference_proteomes.dmnd \
-        --outfmt 6 qseqid staxids bitscore qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore \
-        --sensitive \
-        --max-target-seqs 1 \
-        --evalue 1e-25 \
-        --threads $SLURM_NTASKS \
-        > blobtools/diamond.out
-```
-
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J blob-mapILL                          # Job name 
-#SBATCH -n 16                                   # Number of cores
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -t 0-08:00                              # Runtime in DD-HH:MM
-#SBATCH --mem 25G                               # Memory for all cores in Mbytes
-
-module load Anaconda3/2020.11
-source activate blob
-
-spp_dir=$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../../../spp-names)
-
-mkdir -p blobtools
-
-illumina1=$SCRATCH/giribet_lab/Users/tauanajc/${spp_dir}_illumina1.fastq.gz
-illumina2=$SCRATCH/giribet_lab/Users/tauanajc/${spp_dir}_illumina2.fastq.gz
-
-minimap2 -ax sr \
-         -t $SLURM_NTASKS hypo/whole_genome.h.fa \
-         $illumina1 $illumina2 \
-         | samtools sort -@$SLURM_NTASKS -O BAM -o blobtools/illumina.reads.bam -
-```
-
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J blob-mapONT                          # Job name 
-#SBATCH -n 16                                   # Number of cores
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -t 0-08:00                              # Runtime in DD-HH:MM
-#SBATCH --mem 25G                               # Memory for all cores in Mbytes
-
-module load Anaconda3/2020.11
-source activate blob
-
-spp_dir=$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../../../spp-names)
-
-mkdir -p blobtools
-
-ont=$SCRATCH/giribet_lab/Users/tauanajc/${spp_dir}_ont.fastq.gz
-
-minimap2 -ax map-ont \
-         -t $SLURM_NTASKS hypo/whole_genome.h.fa \
-         $ont > blobtools/ont.reads.sam
-cat blobtools/ont.reads.sam | samtools sort -O BAM -o blobtools/ont.reads.bam -
-#command fails if output of minimap is piped to sort (maybe too long reads causing truncated files)
-#but works just fine if saves sam and then cat pipe
-```
-
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J blob-busco                           # Job name 
-#SBATCH -n 16                                   # Number of cores
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -t 0-08:00                              # Runtime in DD-HH:MM
-#SBATCH --mem 10G                               # Memory for all cores in Mbytes
-
-module load Anaconda3/2020.11
-source activate blob
-
-mkdir -p blobtools
-cd blobtools
-
-busco \
-    -i ../hypo/whole_genome.h.fa \
-    -o assembly_$1 \
-    -l /n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/blobtoolkit/blob_databases/busco_2022_02/$1 \
-    -m geno \
-    -c $SLURM_NTASKS
-
-mv ../blob-busco.$SLURM_ARRAY_TASK_ID.$SLURM_JOB_ID.* ./
+sbatch --array=1 ../../../../scripts/blob-busco.sh metazoa_odb10
+# eukaryota_odb10
 ```
 
 ### Run BlobTools
 
-From specific assembly folder, e.g. Nectonema flye folder:
+From specific assembly folder (**assemblies/spp_folder/flye**):
 ```bash
-sbatch --array=2 ../../../../scripts/blobtools.sh taxid
-```
-
---taxrule default is bestsumorder, option is best sum. This relates to how the taxonomy of blast hits is applied to contigs, but I don't fully understand the difference, so keep an eye, and if weird, try other option: https://blobtoolkit.genomehubs.org/blobtools2/blobtools2-tutorials/adding-data-to-a-dataset/adding-hits/
-
-
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J blobtools                            # Job name 
-#SBATCH -n 16                                   # Number of cores
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -t 0-08:00                              # Runtime in DD-HH:MM
-#SBATCH --mem 10000                             # Memory for all cores in Mbytes
-
-module load Anaconda3/2020.11
-source activate blob
-
-spp_dir=$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../../../spp-names)
-
-# merge the two alignment bam files from illumina and ont: out.bam in1.bam in2.bam
-#samtools merge -@$SLURM_NTASKS blobtools/${spp_dir}.reads.bam blobtools/*.bam
-
-# blobtools
-blobtools create \
-    --threads $SLURM_NTASKS \
-    --fasta hypo/whole_genome.h.fa \
-    --taxid $1 \
-    --taxdump /n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/blobtoolkit/blob_databases/taxdump_2021_07 \
-    --hits blobtools/blast.out \
-    --hits blobtools/diamond.out \
-    --taxrule bestsumorder \
-    --cov blobtools/illumina.reads.bam \
-    --cov blobtools/ont.reads.bam \
-    --busco assembly_metazoa_odb10/run_metazoa_odb10/full_table.tsv \
-    --busco assembly_eukaryota_odb10/run_eukaryota_odb10/full_table.tsv \
-    --busco assembly_nematoda_odb10/run_nematoda_odb10/full_table.tsv \
-    --busco assembly_arthropoda_odb10/run_arthropoda_odb10/full_table.tsv \
-    blobtools/BlobDir
-#--meta blobtools/config.yaml \
+sbatch --array=1 ../../../../scripts/blobtools.sh taxid
 ```
 
 ### View blob
 
 https://blobtoolkit.genomehubs.org/blobtools2/blobtools2-tutorials/opening-a-dataset-in-the-viewer/
 
-View step was giving error in my installation of blobtools2, something about npm. But docker version worked without any issues!
+View step was giving error in my installation of blobtools2, something about npm. But docker version worked without any issues.
 
 From **blobtools** folder inside a specific assembly:
 ```bash
@@ -622,7 +429,7 @@ singularity exec --cleanenv ../../../../../scripts/blobtoolkit_2.6.5.sif blobtoo
 
 Then open in terminal in local machine:
 ```bash
-ssh -N -L 8001:localhost:8001 -L 8000:localhost:8000 -J tauanajc@odyssey.fas.harvard.edu holy7c18312
+ssh -N -L 8001:localhost:8001 -L 8000:localhost:8000 -J <myuser>@odyssey.fas.harvard.edu holy7c18312
 ```
 
 Then in browser:
@@ -779,18 +586,19 @@ grep -c ">" ../hypo/whole_genome.h.fa
 grep -c ">" decontaminated.fasta
 ```
 
-## HiC
 
-Arima protocol for mapping HiC reads to an assembly: https://github.com/ArimaGenomics/mapping_pipeline/blob/master/Arima_Mapping_UserGuide_A160156_v02.pdf
-<br>Then use SALSA2 to create maps.
+## Scaffold assembly with Hi-C data
 
-(Arima's manual to use Juicer: https://arimagenomics.com/wp-content/files/Bioinformatics-User-Guide-Arima-HiC-and-Arima-High-Coverage-HiC.pdf - not used in this pipeline, but saving link for reference. Points to a paper and an online resource listing all HiC-related tools)
+Arima protocol for mapping Hi-C reads to an assembly: https://github.com/ArimaGenomics/mapping_pipeline/blob/master/Arima_Mapping_UserGuide_A160156_v02.pdf
+<br>Then use YaHS to scaffold.
+
+### Map Hi-C reads to assembly
 
 Download Arima scripts in **scripts** folder:
 ```bash
 git clone https://github.com/ArimaGenomics/mapping_pipeline.git
 mv mapping_pipeline arima_mapping
-# below I install picard in conda, but did not work, because arima's command uses the java version, so:
+# picard in conda did not work, because arima's command uses the java version, so:
 wget https://github.com/broadinstitute/picard/releases/download/2.25.7/picard.jar
 ```
 
@@ -802,40 +610,16 @@ conda create -n hic -c conda-forge -c bioconda python=3.8 samtools==1.10 picard=
 
 There are 4 parts to the mapping pipeline: indexing the assembly, mapping HiC reads to assembly, combining replicate reads from different lanes, and removing duplicates.
 
-### Mapping - Indexing
+1- Indexing
 
 Create bwa index of the assembly.
 
-- From specific assembly folder:
+- From specific assembly folder (**assemblies/spp_folder/flye**):
 ```
 sbatch ../../../../scripts/hic-indexing.sh <post-blobtools-assembly-file>
 ```
 
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J HiC-indexing                         # Job name 
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -n 1                                    # Number of cores/cpus
-#SBATCH -t 00-00:30                             # Runtime in DD-HH:MM
-#SBATCH --mem 1000                              # Memory for all cores in Mbytes (--mem-per-cpu for MPI jobs)
-
-module load Anaconda3/2020.11
-source activate hic
-
-mkdir -p hic/mapping
-
-# Create assembly.fai index
-samtools faidx $1
-rsync -a blobtools/decontaminated.fasta.fai hic/mapping/
-
-# Create bwa index
-bwa index -a bwtsw -p hic-bwa-index $1
-mv hic-bwa-index.* hic/mapping/
-```
-
-### Mapping
+2- Mapping
 
 From Arima manual:<br>
 STEP 1: Use BWA-MEM to align the Hi-C paired-end reads to the reference sequences. Because Hi-C captures conformation via proximity-ligated fragments, paired-end reads are first mapped independently (assingle-ends) usingBWA-MEM and are subsequently paired in a later step.<br>
@@ -843,65 +627,17 @@ STEP 2: Subsequent to mapping as single-ends, some of these single-end mapped re
 STEP 3: After filtering, we pair the filtered single-end Hi-C reads using `two_read_bam_combiner.pl`, which outputs a sorted, mapping quality filtered, paired-end BAM file.
 STEP 4: We then add read groups to this BAM file using Picard Tools.
 
-- From specific assembly folder:
+- From specific assembly folder (**assemblies/spp_folder/flye**):
 
 ```bash
 # get list of HiC fastq file names and save in file inside hic folder - CHANGE NAME OF TAXA
 \ls /n/Giribet_Lab/tauanajc/GASTROPODA/rawdata/2020_03-NovaSeqS4/Tauana/HiC-Acutogordius_australiensis_152393_S6_L00* | rev | cut -d/ -f 1 | cut -d_ -f3- | rev | uniq > hic/fastq-names-hic.txt
 
 # run
-sbatch --array=1-2 ../../../../scripts/hic-map.sh # array is number of lines in fastq-names-hic.txt
+sbatch --array=1 ../../../../scripts/hic-map.sh
 ```
 
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J HiC-map                              # Job name 
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -n 16                                   # Number of cores/cpus
-#SBATCH -t 00-08:00                             # Runtime in DD-HH:MM
-#SBATCH --mem 5000                              # Memory for all cores in Mbytes (--mem-per-cpu for MPI jobs)
-
-module load Java/1.8
-module load Anaconda3/2020.11
-source activate hic
-
-NAME=$(sed -n "${SLURM_ARRAY_TASK_ID}p" hic/fastq-names-hic.txt)
-LABEL=$(head -n1 hic/fastq-names-hic.txt | rev | cut -d_ -f3- | rev)
-IN_DIR='/n/Giribet_Lab/tauanajc/GASTROPODA/rawdata/2020_03-NovaSeqS4/Tauana'
-FILTER='/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/arima_mapping/filter_five_end.pl'
-COMBINER='/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/arima_mapping/two_read_bam_combiner.pl'
-PICARD='/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/picard.jar'
-MAPQ_FILTER=10
-
-mkdir -p hic/mapping/raw-bam
-mkdir -p hic/mapping/filtered-bam
-mkdir -p hic/mapping/tmp-bam
-mkdir -p hic/mapping/paired-bam
-
-cd hic/mapping
-
-echo "### Step 1.A: FASTQ to BAM (1st)"
-bwa mem -t $SLURM_NTASKS hic-bwa-index $IN_DIR/$NAME\_R1_001.fastq.gz | samtools view -@ $SLURM_NTASKS -Sb - > raw-bam/$NAME\_1.bam
-
-echo "### Step 1.B: FASTQ to BAM (2nd)"
-bwa mem -t $SLURM_NTASKS hic-bwa-index $IN_DIR/$NAME\_R2_001.fastq.gz | samtools view -@ $SLURM_NTASKS -Sb - > raw-bam/$NAME\_2.bam
-
-echo "### Step 2.A: Filter 5' end (1st)"
-samtools view -h raw-bam/$NAME\_1.bam | perl $FILTER | samtools view -Sb - > filtered-bam/$NAME\_1.bam
-
-echo "### Step 2.B: Filter 5' end (2nd)"
-samtools view -h raw-bam/$NAME\_2.bam | perl $FILTER | samtools view -Sb - > filtered-bam/$NAME\_2.bam
-
-echo "### Step 3: Pair reads & mapping quality filter"
-perl $COMBINER filtered-bam/$NAME\_1.bam filtered-bam/$NAME\_2.bam samtools $MAPQ_FILTER | samtools view -bS -t decontaminated.fasta.fai - | samtools sort -@ $SLURM_NTASKS -o tmp-bam/$NAME.bam -
-
-echo "### Step 4: Add read group"
-java -Xmx4G -Djava.io.tmpdir=temp/ -jar picard AddOrReplaceReadGroups INPUT=tmp-bam/$NAME.bam OUTPUT=paired-bam/$NAME.bam ID=$NAME LB=$NAME SM=$LABEL PL=ILLUMINA PU=none
-```
-
-### Combine lanes and remove duplicates
+3/4- Combine lanes and remove duplicates
 
 From Arima's manual:<br>
 We also use Picard Tools to discard any PCR duplicates present in the paired-end BAM file generated above. If applicable, we require that you merge paired-end BAM files that were sequenced via multiple Illumina lanes from the same library (i.e. technical replicates) before removing PCR duplicates.
@@ -911,62 +647,18 @@ From specific assembly folder:
 sbatch ../../../../scripts/hic-dedup.sh
 ```
 
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J HiC-dedup                            # Job name 
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -n 16                                   # Number of cores/cpus
-#SBATCH -t 00-08:00                             # Runtime in DD-HH:MM
-#SBATCH --mem 15000                             # Memory for all cores in Mbytes (--mem-per-cpu for MPI jobs)
-
-module load Java/1.8
-module load Anaconda3/2020.11
-source activate hic
-
-LABEL=$(head -n1 hic/fastq-names-hic.txt | rev | cut -d_ -f3- | rev)
-STATS='/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/arima_mapping/get_stats.pl'
-PICARD='/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/picard.jar'
-# This does not expand variable because of single quotes:
-#INPUTS_TECH_REPS=("INPUT=${LABEL}_S6_L001.bam" "INPUT=${LABEL}_S6_L002.bam" "INPUT=${LABEL}_S6_L003.bam" "INPUT=${LABEL}_S6_L004.bam")
-# This does not read all elements of array in the java command, just the first…
-#INPUTS_TECH_REPS=('INPUT='"${LABEL}"'_S6_L002.bam' 'INPUT='"${LABEL}"'_S6_L003.bam' 'INPUT='"${LABEL}"'_S6_L004.bam')
-# So decided to list all elements directly in command, instead of using bash array
-
-mkdir -p hic/mapping/combined-bam
-mkdir -p hic/mapping/final-deduplicated-bam
-
-cd hic/mapping
-
-echo "### Step 1: combine technical replicates"
-cd paired-bam
-java -Xmx8G -Djava.io.tmpdir=../temp/ -jar $PICARD MergeSamFiles \
-INPUT=${LABEL}_S6_L001.bam INPUT=${LABEL}_S6_L002.bam INPUT=${LABEL}_S6_L003.bam INPUT=${LABEL}_S6_L004.bam \
-OUTPUT=../combined-bam/$LABEL.bam USE_THREADING=TRUE ASSUME_SORTED=TRUE VALIDATION_STRINGENCY=LENIENT
-
-cd ..
-echo "### Step 2: Mark duplicates"
-java -Xmx30G -XX:-UseGCOverheadLimit -Djava.io.tmpdir=temp/ -jar $PICARD MarkDuplicates \
-INPUT=combined-bam/$LABEL.bam OUTPUT=final-deduplicated-bam/$LABEL.final.bam \
-METRICS_FILE=final-deduplicated-bam/metrics.$LABEL.txt TMP_DIR=tmp-bam \
-ASSUME_SORTED=TRUE VALIDATION_STRINGENCY=LENIENT REMOVE_DUPLICATES=TRUE
-
-echo "### Step 3: index bam"
-samtools index final-deduplicated-bam/$LABEL.final.bam
-
-echo "### Step 4: bam stats"
-perl $STATS final-deduplicated-bam/$LABEL.final.bam > final-deduplicated-bam/$LABEL.bam.stats
-
-echo "Finished Mapping Pipeline through Duplicate Removal"
-```
-
 From Arima's manual:<br>
 The pipeline is complete. The final output of this pipeline is a single BAM file that contains the paired, 5’-filtered, and duplicate-removed Hi-C reads mapped to the reference sequences of choice. The resulting statistics file has a breakdown of the total number of intra-contig read-pairs, long-range intra-contig read-pairs, and inter-contig read-pairs in the final processed BAM file.
 
-The outputs from the Arima Hi-C Mapping Pipeline are the inputs for salsa2.
 
-Salsa2 requires a bed file which is converted from bam using Bedtools, an assembly in fasta format, an index for that assembly in .fai (we already made this at the beginning of the mapping pipeline)
+### Scaffold with YaHS
+
+https://github.com/c-zhou/yahs
+<br>https://github.com/sanger-tol/yahs
+
+The outputs from the Arima Hi-C Mapping Pipeline are the inputs for YaHS.
+
+YaHS requires a bed file which is converted from bam using Bedtools, an assembly in fasta format, an index for that assembly in .fai (we already made this at the beginning of the mapping pipeline)
 
 ```
 # convert bam to bed file and sort by read name
@@ -974,79 +666,24 @@ bamToBed -i hic/mapping/final-deduplicated-bam/$LABEL.final.bam > hic/$LABEL.bed
 sort -k 4 hic/$LABEL.bed > tmp && mv tmp hic/$LABEL.bed
 ```
 
-## YaHS
-
-https://github.com/c-zhou/yahs
-<br>https://github.com/sanger-tol/yahs
-
-Input file is the same bed file used for salsa.
-
 YaHS runs pretty fast on nematomorph genomes. After that, juicer tools to create the file used for visualization of the contact map. I followed instructions on c-zhou's github for the hole thing (yahs and juicer). One of the commands is to create the file for scaffold sizes (should contain two columns - scaffold name and scaffold size): the github says to create from first two columns of the index file from the yahs scaffolds fasta, but this index is not needed otherwise, so it doesn't exist at this point. In one of the github issues, however, YaHS author Chenxy says to create this file by grepping the juicer log file - it is the preferred method anyway (deals with >2G chromosomes, https://github.com/c-zhou/yahs/issues/4#issuecomment-1159017424)
 
-From specific assembly folder:
+From specific assembly folder (**assemblies/spp_folder/flye**):
 ```bash
 sbatch ../../../../scripts/hic-yahs.sh
 # last juicer step is long and memory intensive (12h, >100G for Acutogordius)
 ```
 
-
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J yahs                                 # Job name 
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -n 8                                    # Number of cores/cpus
-#SBATCH -t 07-00:00                             # Runtime in DD-HH:MM
-#SBATCH --mem 184000                            # Memory for all cores in Mbytes (--mem-per-cpu for MPI jobs)
-
-module load Java/1.8
-module load parallel
-
-LABEL=$(head -n1 hic/fastq-names-hic.txt | rev | cut -d_ -f3- | rev)
-YAHS="/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/yahs/"
-JUICER="/n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/juicer_tools_1.22.01.jar"
-
-mkdir -p hic/yahs
-
-### convert bam to bed file and sort by read name
-bamToBed -i hic/mapping/final-deduplicated-bam/$LABEL.final.bam > hic/$LABEL.bed
-sort -k 4 hic/$LABEL.bed > tmp && mv tmp hic/$LABEL.bed
-
-### run yahs
-$YAHS/yahs blobtools/decontaminated.fasta hic/$LABEL.bed \
--o hic/yahs/yahs.out
-
-### create .hic contact map file for visualization
-cd hic/yahs
-
-# juicer pre to create intermediary file
-($YAHS/juicer pre yahs.out.bin yahs.out_scaffolds_final.agp ../mapping/decontaminated.fasta.fai | \
- sort -k2,2d -k6,6d -T ./ --parallel=$SLURM_NTASKS -S32G | \
- awk 'NF' > alignments_sorted.txt.part) 2>&1 | tee juicer1.log && (mv alignments_sorted.txt.part alignments_sorted.txt)
-
-# create file for scaffold sizes
-#awk '{print $1,$2}' ../mapping/yahs.out_scaffolds_final.fa.fai > scaffolds_final.chrom.sizes # but have to create index first!
-cat juicer1.log | grep "PRE_C_SIZE:" | cut -d' ' -f 2,3 > scaffolds_final.chrom.sizes
-#asmlen=$(cat juicer1.log | grep "PRE_C_SIZE:" | cut -d' ' -f 2,3) # same content but in a variable instead of file
-
-# juicer pre to create .hic file
-(java -jar -Xmx184G $JUICER pre --threads 8 alignments_sorted.txt out.hic.part scaffolds_final.chrom.sizes) 2>&1 | tee juicer2.log && (mv out.hic.part out.hic)
-#(java -jar -Xmx32G $JUICER pre --threads 8 alignments_sorted.txt out.hic.part <(echo "assembly ${asmlen}")) && (mv out.hic.part out.hic)
-```
-
-### Visualize with Juicebox
+### Visualize contact map with Juicebox
 
 https://github.com/aidenlab/Juicebox/wiki
 
-
 Download out.hic file and open with Juicebox (online: https://aidenlab.org/juicebox/ or java or Desktop: https://github.com/aidenlab/Juicebox/wiki/Download). The online version allows to share a link to put in the paper, so that people can load and play with your contact map.
 
-![Acutogordius_HiC_YaHS_nogrid.png](attachment:a2b31c8f-50fb-4d24-850a-8f01ca759eb3.png)
 
-## BUSCO: check assembly quality
+## Check assembly quality with BUSCO
 
-Database of orthologs from different large sets of organisms. Based on evolutionarily-informed expectations of gene content of near-universal single-copy orthologs.
+Database of universal orthologs from different sets of organisms. Based on evolutionarily-informed expectations of gene content of near-universal single-copy orthologs.
 
 https://busco.ezlab.org<br>
 https://gitlab.com/ezlab/busco
@@ -1062,41 +699,27 @@ busco --list-datasets
 
 [I was getting error "ERROR:busco.BuscoRunner Metaeuk did not recognize any genes matching the dataset" with HiC assembly only. Apparently issue with memory, even though log files do not indicate that. Based on seeing other people mention memory issues and trying to accomodate with metaeuk flag, I simply gave a lot of memory to the job (184GB), and it ran correctly.]
 
-Of interest: eukaryota_odb10, metazoa_odb10, nematoda_odb10, arthropoda_odb10
+Of interest: metazoa_odb10. eukaryota_odb10
 
-- From **assemblies/busco/** folder:
+- From **assemblies** folder:
 ```bash
-sbatch busco-genomes.sh <assembly.file/folder> <lineage>
+mkdir -p QC/busco/assemblies
+#copy final assemblies to be evaluated into new QC/busco/assemblies folder, then
+cd QC/busco
+sbatch ../../../../scripts/busco-genomes.sh <assembly.file/folder> <lineage>
 #Example:
-sbatch busco-genomes.sh assemblies eukaryota_odb10
-#for i in assemblies/all_assemblies_fasta/*; do sbatch busco-metazoa.sh $i; done
-```
-
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J Busco                                # Job name 
-#SBATCH -n 16                                   # Number of cores
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -t 0-08:00                              # Runtime in DD-HH:MM
-#SBATCH --mem 184000                            # Memory for all cores in Mbytes
-
-module load Anaconda3
-source activate busco
-
-#busco -i $1 -l metazoa_odb10 -o busco_metazoa -m genome --cpu $SLURM_NTASKS
-busco -i $1 -l $2 -o out_$2 -m genome --cpu $SLURM_NTASKS
+sbatch busco-genomes.sh assemblies metazoa_odb10
 ```
 
 Important output files
 
-Inside folder structure:<br>
+Inside folder:<br>
 busco/out_metazoa_odb10/run_metazoa_odb10/
 
     - short_summary.txt
     - full_table.tsv
     - missing_busco_list.tsv
+
 
 ## Assembly stats with QUAST
 
@@ -1104,30 +727,18 @@ QUality ASsessment Tool evaluates genome/metagenome assemblies by computing vari
 
 https://github.com/ablab/quast
 
-Works both with and without reference genomes. However, it is much more informative if at least a close reference genome is provided along with the assemblies. The tool accepts multiple assemblies, thus is suitable for comparison.
+The tool accepts multiple assemblies, thus is suitable for comparison.
 
 ```bash
 # install quast
 conda create -n quast -c bioconda -c conda-forge quast
 ```
 
-- From specific assembly folder:
+- From **assemblies** folder:
 ```bash
-sbatch ../../scripts/quast.sh <assembly.file> [multiple files possible]
+mkdir -p QC/quast/assemblies
+#copy final assemblies to be evaluated into new QC/quast/assemblies folder, then
+cd QC/quast
+sbatch ../../../../scripts/quast.sh <assembly.file> assemblies/*
 ```
 
-```bash
-%%bash
-#!/bin/bash
-
-#SBATCH -J Quast                                # Job name 
-#SBATCH -n 16                                   # Number of cores
-#SBATCH -N 1                                    # Ensure that all cores are on one machine
-#SBATCH -t 0-08:00                              # Runtime in DD-HH:MM
-#SBATCH --mem 10000                             # Memory for all cores in Mbytes
-
-module load Anaconda3
-source activate quast
-
-quast.py -t $SLURM_NTASKS -o quast "$@"
-```
