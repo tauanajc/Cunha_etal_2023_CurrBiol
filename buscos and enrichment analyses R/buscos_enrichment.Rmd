@@ -1,0 +1,405 @@
+---
+title: "BUSCO and enrichment analyses"
+author: Tauana J. Cunha
+date: "February 2023"
+output:
+  html_notebook:
+    code_folding: none
+    highlight: tango #default, tango, pygments, kate, monochrome, zenburn, textmate
+    toc: true
+    toc_float:
+      collapsed: false
+---
+
+```{r}
+.libPaths(new = "libR/")
+library(VennDiagram)
+library(venneuler)
+library(RColorBrewer)
+library(clusterProfiler)
+library(GO.db)
+library(enrichplot)
+library(tidyverse)
+```
+
+## Busco data
+Load busco results:
+```{r}
+acutogordius_hic <- read_tsv("../results/busco545-Nematomorpha/out_metazoa_odb10/Acutogordius_australiensis-152393-HiC.fa/run_metazoa_odb10/full_table.tsv", skip = 2)
+nectonema_draft <- read_tsv("../results/busco545-Nematomorpha/out_metazoa_odb10/Nectonema_munidae-DNA05827-Draft.fa/run_metazoa_odb10/full_table.tsv", skip = 2)
+```
+
+Join all in one data frame:
+```{r}
+buscos <- bind_rows("Acutogordius_HiC" = acutogordius_hic,
+                    "Nectonema_Draft" = nectonema_draft,
+                    .id = "assembly") %>% rename("BuscoID" = "# Busco id")
+buscos
+```
+
+Set of all 954 Metazoa buscos:
+```{r}
+metazoa_genes <- buscos %>% pull(BuscoID) %>% unique()
+#write_csv2(as.data.frame(metazoa_genes),
+#           file = "../data/metazoa_buscos.csv", col_names = F)
+```
+
+## Exploratory plots
+Length histogram:
+```{r}
+ggplot(buscos) +
+  geom_histogram(aes(x = Length, fill = Status)) +
+  scale_fill_brewer(type = "qual") +
+  theme_minimal() +
+  facet_wrap(~assembly, ncol=1)
+```
+
+Length boxplot:
+```{r}
+ggplot(buscos) +
+  geom_boxplot(aes(x = Status, y = Length, fill = assembly)) +
+  scale_fill_brewer(type = "qual") +
+  theme_minimal()
+```
+
+## Venn diagram
+List of genes present for each sample, and the total metazoan set:
+```{r}
+present <- buscos %>%
+  filter(Status != "Missing") %>%
+  with(., split(BuscoID, assembly))
+
+present$Metazoa_buscos <- metazoa_genes
+
+summary(present)
+```
+
+Only option that automatically puts smaller sets inside larger set, but circles not proportional:
+```{r}
+myCol <- brewer.pal(3, "Pastel2")
+vennbuscos <- venn.diagram(x = present, disable.logging = T,
+                           filename = '../figures/venn_buscos/venn_buscos.png',
+             category.names = c("Acutogordius" , "Nectonema" , "Metazoa BUSCOS"),
+             imagetype="png", resolution = 300,
+             height = 480, width = 480,
+             # Circles
+             lwd = 2, lty = 'blank', fill = myCol,
+             # Numbers
+             cex = .5, fontface = "bold", fontfamily = "sans",
+             # Set names
+             cat.cex = 0.4, cat.fontface = "bold", cat.default.pos = "text",
+             cat.fontfamily = "sans")
+```
+
+Option with correct proportions, but not nested:
+This is the one used for the main Figure in the manuscript.
+```{r}
+pdf(file = "../figures/venn_buscos/venn_prop.pdf", width = 5, height = 5)
+  plot(venneuler(c(Acutogordius=78, Nectonema=88, MetazoaBuscos=954,
+                 "Acutogordius&Nectonema"=568, "Acutogordius&MetazoaBuscos"=78,
+                 "Nectonema&MetazoaBuscos"=88 ,"Acutogordius&Nectonema&MetazoaBuscos"=734)))
+dev.off()
+```
+
+Chi-square test for overlap of 220 missing genes. First create a matrix with number of genes for each/both species, taken easily from the venn_buscos.png file created just above.
+```{r}
+# cols = present in Acuto, absent in Acuto
+# rows = present in Necto, absent in Necto
+chimatrix <- matrix(c(568, 88, 78, 220), ncol = 2)
+chimatrix
+
+chisq.test(chimatrix)
+```
+
+
+## Enrichment analysis
+
+Hypergeometric enrichment (= simple enrichment or over-representation analysis) to assess whether the number of missing buscos associated with a given function is larger than expected by chance.
+
+1- Define GO universe, the background set of all GO terms against which we will test for enrichment. It should include any gene that could have been positive (>GO terms of all 954 metazoan buscos and their GO ancestral terms)
+2- Define genes significant for variable of interest (>missing buscos in genome of nematomorphs)
+3- Calculate proportion of significant genes in gene set
+4- Estimate probability and significance (p-value)
+
+### GO universe
+Start with loading the data we got with a custom python script (buscos_to_GO.py) that retrieves GO ids/terms from the OrthoDB v10 based on the list of all 954 Metazoan Busco IDs. Then filter only for GO terms (there are interpro and other lines there too).
+The terms themselves were not complete (NA for unclassified GOs), and even those do have classification if you look them up in https://www.ebi.ac.uk/QuickGO/, so here we will only keep the original BuscoID and the GO ids retrieved with the python script. We will use the package GO.db in the following step to get all GO terms and their ontology classification from each GO id.
+```{r}
+buscos_GOs <- read_csv("../data/metazoa_buscos_GOterms.csv") %>%
+  filter(grepl("GO:", name)) %>%
+  filter(!obsolete_term) %>%
+  select(BuscoID = orthodb_id, GOID = id, ancestor_terms,
+         count, obsolete_term)
+buscos_GOs
+```
+
+The data above only has the specific GO ids/terms for the Busco genes, but not the associated higher level terms. Let's expand the lists of ancestor_terms, and bind it with the original data set, so that each term (specific and ancestral) has its own line:
+```{r}
+metazoanGO <- buscos_GOs %>%
+  mutate(ancestor_terms = str_split(ancestor_terms, ",")) %>%
+  select(BuscoID, GOID=ancestor_terms) %>%
+  unnest(GOID) %>%
+  bind_rows(select(buscos_GOs, BuscoID, GOID)) %>%
+  rowwise() %>%
+  mutate(GO_term = Term(GOID),
+         GO_category = Ontology(GOID)) %>%
+  ungroup %>%
+  filter(!is.na(GO_category)) # GO ids that did not result in any terms
+                      # quickgo shows they are secondary ids of other GOs already represented
+metazoanGO
+```
+
+Prepare GO universe input files for enrichment analysis:
+From help of enricher(): TERM2GENE: user input annotation of TERM TO GENE mapping, a data.frame of 2 column with term and gene.
+```{r}
+term2gene <- metazoanGO %>%
+  split(f = as.factor(.$GO_category)) %>%
+  purrr::map(~select(.x, GOID, BuscoID))
+
+term2gene
+```
+
+This one is optional, but it's how we keep the GO term name:
+From help of enricher(): TERM2NAME: user input of TERM TO NAME mapping, a data.frame of 2 column with term and name.
+```{r}
+term2name <- metazoanGO %>%
+  split(f = as.factor(.$GO_category)) %>%
+  purrr::map(~select(.x, GOID, GO_term))
+
+term2name
+```
+
+### Genes of interest
+Input file for set of genes of interest to test for enrichment (should be a set of unique ids): buscos that are missing from both Acutogordius and Nectonema. The code creates a T/F column for whether or not the busco is missing, then groups by BuscoID and sums TRUEs, so that we get a column where 0 = not missing in either, 1 = missing in one of the species, 2 = missing in both species:
+```{r}
+overlap_missing <- buscos %>%
+  mutate(is_missing = Status == "Missing") %>%
+  group_by(BuscoID) %>%
+  summarize(Nmissing = sum(is_missing)) %>%
+  filter(Nmissing == 2) %>%
+  pull(BuscoID)
+#overlap_missing
+```
+
+### Over-representation analysis
+Now put all together in clusterprofiler analysis. For each of the three GO categories (Cellular Component, Molecular Function, Biological Process), run enricher function of clusterprofiler:
+```{r}
+enrich_GO <- purrr::map2(.x = term2gene, .y = term2name,
+                         ~enricher(gene = overlap_missing, TERM2GENE = .x, TERM2NAME = .y))
+# assign ontology to variable (says unknown by default)
+enrich_GO[[1]]@ontology <- names(enrich_GO)[1]
+enrich_GO[[2]]@ontology <- names(enrich_GO)[2]
+enrich_GO[[3]]@ontology <- names(enrich_GO)[3]
+enrich_GO#[[1]]@result %>% filter(p.adjust < 0.05)
+```
+
+Get result df from enrich_GO and add GO definitions and ontology:
+```{r}
+sign_GOs <- function(df){
+  df %>%
+    filter(p.adjust < 0.05) %>%
+    mutate(GO_definition = Definition(ID),
+           GO_category = Ontology(ID)) %>%
+    separate(GeneRatio, into = c("size_missing_term","size_missing_all"),
+             sep = '/', remove = F) %>%
+    separate(BgRatio, into = c("size_background_term","size_background_all"),
+             sep = '/', remove = F) %>%
+    mutate_at(vars("size_missing_term","size_missing_all",
+                   "size_background_term","size_background_all"), as.numeric) %>%
+    mutate(`Missing over background` = size_missing_term/size_background_term) %>%
+    select(`GO ID` = ID, `GO term description` = Description, 
+           `GO category` = GO_category, `Associated missing BUSCOs` = Count,
+           `Missing ratio` = GeneRatio, `Background ratio` = BgRatio,
+           `Missing over background`, pvalue, p.adjust, 
+           `BUSCO ID` = geneID, `GO term definition` = GO_definition) %>%
+    remove_rownames()}
+
+enriched <- enrich_GO %>%
+  purrr::map(~sign_GOs(.x@result))
+enriched
+```
+
+GeneRatio = k/n, where n is the set of *all annotated MISSING buscos*, and k is the number of buscos within n that are *annotated to that SPECIFIC GO term*. The larger the ratio, the more MISSING genes are related to that particular GO category.
+BgRatio = M/N, where N is the set of *all annotated BUSCOS in the background* (universal set), and M is the number of buscos within N that are *annotated to that SPECIFIC GO term*. The larger the ratio, the more OVERALL buscos are annotated for that particular GO category.
+
+By consequence, M should always be larger than k, because it includes the missing buscos, plus any other buscos not missing that are also associated with that specific GO term. *Biologically for the nematomorphs, the most relevant enriched genes are the ones where M is the closest to k, which implies that most of the genes in the background set annotated to that category are missing in nematomorphs.* (genes with the smallest pvalue)
+
+Count = k, number of annotated missing buscos.
+
+Save supplementary table with significant terms:
+```{r}
+bind_rows(enriched) %>% write_csv(., file = "../results/EnrichedGOterms.csv")
+```
+
+Expand column with which BUSCOs are annotated to each GO term, so that we can count how many unique BUSCOs were significant:
+```{r}
+significant_buscos <- bind_rows(enriched) %>%
+  mutate(significant_BUSCOs = str_split(`BUSCO ID`, "/")) %>%
+  unnest(significant_BUSCOs) %>%
+  group_by(`GO category`, significant_BUSCOs) %>%
+  summarise(CountGOterms = n()) %>%
+  arrange(CountGOterms, `GO category`)
+significant_buscos
+```
+
+All unique significant BUSCOs between BP, CC and MF:
+```{r}
+unique_significant_buscos <- significant_buscos %>% pull(significant_BUSCOs) %>% unique
+unique_significant_buscos
+#unique_significant_buscos %in% overlap_missing
+```
+
+Order buscos by numbr of GO terms associated with them:
+```{r}
+ordered_buscos <- significant_buscos %>%
+  group_by(significant_BUSCOs) %>%
+  summarize(N_GO = sum(CountGOterms)) %>%
+  arrange(N_GO) %>%
+  mutate(significant_BUSCOs = fct_reorder(significant_BUSCOs, N_GO))
+```
+
+Plot number of GO terms for each missing BUSCO:
+```{r}
+p_significant_buscos <- significant_buscos %>%
+  ggplot() +
+  geom_col(aes(x = factor(significant_BUSCOs, levels = ordered_buscos$significant_BUSCOs),
+               y = CountGOterms, fill = `GO category`)) +
+  scale_fill_brewer(type = "qual") +
+  xlab("BUSCO ID") + ylab("Number of annotated GO terms") +
+  #ggtitle("Number of GO terms for each Missing BUSCO") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank())
+p_significant_buscos
+```
+
+```{r}
+ggsave("../figures/enrichment/buscos.pdf", p_significant_buscos,
+       width = 6.75, height = 4, units = "in", useDingbats = F)
+```
+
+
+### Plot enrichment
+https://guangchuangyu.github.io/2016/01/go-analysis-using-clusterprofiler/
+
+Enrichment map:
+Visualizes gene sets as a network. Mutually overlapping gene sets tend to cluster together, making it easier for interpretation. When the similarity between terms meets a certain threshold (default is 0.2, adjusted by parameter 'min_edge'), there will be edges between terms. The stronger the similarity, the shorter and thicker the edges.
+```{r}
+set.seed(5) #2 without clusters also good
+p_map <- enrich_GO %>%
+  purrr::map(~emapplot(pairwise_termsim(.x),
+                       showCategory=18, shadowtext = F,
+                       layout.params = list('gem'),
+                       cex.params = list(line=.3, category_label = .6, category_node = .7),
+                       #cluster.params = list(cluster = T ,legend = T),
+                       repel = T))
+p_map[[1]]
+p_map[[2]]
+```
+
+Save:
+```{r}
+p_map_paths <- stringr::str_c("../figures/enrichment/enrichment_map_", names(p_map), ".pdf")
+pwalk(.l = list(p_map_paths, p_map),
+      ~ggsave(filename = .x, plot = .y,
+              width = 10, height = 10, units = "in", useDingbats = F))
+```
+
+
+Dotplot:
+```{r}
+p_dot <- enrich_GO %>%
+  purrr::map(~dotplot(.x))
+p_dot
+```
+
+Save:
+```{r}
+p_dot_paths <- stringr::str_c("../figures/enrichment/enrichment_dot_", names(p_map), ".pdf")
+pwalk(.l = list(p_dot_paths, p_dot),
+      ~ggsave(filename = .x, plot = .y,
+              width = 7, height = 7, units = "in", useDingbats = F))
+```
+
+
+Similar idea, but based on calculated column of Missing over background BUSCOs:
+```{r}
+p_MissingRatio <- bind_rows(enriched) %>%
+  ggplot() +
+  geom_col(aes(x = reorder(`GO term description`, `Missing over background`),
+               y = `Missing over background`,
+               fill = `GO category`)) +
+  scale_fill_brewer(type = "qual") +
+  scale_y_continuous(breaks = c(0,.25,.5,.75,.9), limits = c(0,1)) +
+  ylab("Proportion of missing over background BUSCOs") +
+  xlab("GO term") +
+  #ggtitle("Missing BUSCOs relative to Metazoa set") +
+  coord_flip() +
+  theme_minimal()
+p_MissingRatio
+```
+
+Save:
+```{r}
+ggsave("../figures/enrichment/missing_ratio.pdf", p_MissingRatio,
+       width = 6.75, height = 4, units = "in", useDingbats = F)
+```
+
+
+Gene-concept network, plots linkage of genes and enriched GO terms:
+```{r}
+p_network <- enrich_GO %>%
+  purrr::map(~cnetplot(.x, #showCategory = 6, # For 6 top BP terms
+                       repel = T, shadowtext = 'all')) #, colorEdge = T))
+p_network#[[1]]
+```
+
+Only the top 5 significant terms are displayed for simplicity (default), which really only affects BP that has 37 terms total.
+
+Save:
+```{r}
+p_net_paths <- stringr::str_c("../figures/enrichment/enrichment_network_", names(p_map), ".pdf")
+pwalk(.l = list(p_net_paths, p_network),
+      ~ggsave(filename = .x, plot = .y,
+              width = 10, height = 10, units = "in", useDingbats = F))
+```
+
+
+Directed acyclic graph (DAG) of enriched GO terms:
+```{r}
+p_dag <- enrich_GO %>%
+  purrr::map(~plotGOgraph(.x, firstSigNodes = 10)) #10 is default
+
+# pdf("../figures/enrichment/enrichment_dag_BP2.pdf") # Saves only first cluster, not the 3
+# plot(p_dag[[1]]$complete.dag)
+# dev.off()
+# 
+# pdf("../figures/enrichment/enrichment_dag_CC.pdf")
+# plot(p_dag[[2]]$complete.dag)
+# dev.off()
+# 
+# pdf("../figures/enrichment/enrichment_dag_MF.pdf")
+# plot(p_dag[[3]]$complete.dag)
+# dev.off()
+```
+
+
+```{r}
+plot(p_dag[[1]]$complete.dag)
+```
+
+
+```{r}
+plot(p_dag[[2]]$complete.dag)
+```
+
+
+```{r}
+plot(p_dag[[3]]$complete.dag)
+```
+
+Only the top 10 significant terms are displayed for simplicity (default), which really only affects BP that has 37 terms total.
+Each node represents a GO term and branches represent the containment relationships and the degree of colors represent the extent of enrichment, with black and white ellipses representing non-significant enrichment and yellow to red representing the gradient from higher to lower p.adjust values (red most significant). The numbers under the GO terms are the ratio of missing buscos annotated with that term over the number of buscos annotated with that term in the reference database (Missing over background column of enriched_GO df). Top 10 of significantly enriched terms are represented in boxes and the rest in ellipses. BP: Among the 37 significantly enriched GO BP terms, the higher numbers were in cilium and cell projection.
+
+
+## Scratch
+To quickly look at a GO term: search for id in https://www.ebi.ac.uk/QuickGO/
