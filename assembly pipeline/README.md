@@ -8,7 +8,7 @@ Table of Contents:
 - [Setup](#setup)
 - [Basecall ONT reads with Guppy](#basecall-ont-with-guppy)
 - [Trim Illumina reads with TrimGalore](#remove-illumina-adapters-with-trimgalore)
-- [Estimate genome size with Jellyfish and GenomeScope](#estimate-genome-size-with-jellyfish)
+- [Estimate genome size with Jellyfish and GenomeScope](#estimate-genome-size-with-jellyfish-and-genomescope)
 - [Genome Assembly with Flye](#genome-assembly-of-ont-data-with-flye)
 - [Polish with long reads - Racon & Medaka](#polish-with-long-reads)
 - [Remove haplotigs with purge_dups](#remove-haplotigs-with-purge_dups)
@@ -113,19 +113,20 @@ sbatch --array=1 ../../scripts/trimgalore.sh /wholePATHtoRAWDATA/PREFIXofFILES
 ```
 
 
-## Estimate genome size with Jellyfish
+## Estimate genome size with Jellyfish and GenomeScope
 
 Esimate genome size based on short reads.
 
 https://github.com/gmarcais/Jellyfish/tree/master/doc : Jellyfish<br>
 http://qb.cshl.edu/genomescope/ : Web service to estimate genome size from histogram of jellyfish<br>
-https://bioinformatics.uconn.edu/genome-size-estimation-tutorial/# : Nice tutorial
 
 - From **illumina** folder:
 
 ```bash
 sbatch --array=1 ../../scripts/jellyfish.sh
 ```
+
+Then use output .histo file in GenomeScope.
 
 
 ## Genome assembly of ONT data with Flye
