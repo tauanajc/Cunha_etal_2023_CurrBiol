@@ -1,1 +1,1 @@
-Empty folder for example folder structure.
+Empty folders for example folder structure, and example spp\_names file.
