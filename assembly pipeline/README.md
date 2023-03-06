@@ -4,6 +4,19 @@ Pipeline for genome assembly, with reference links to software and information.
 
 Script calls in this pipeline are often made from inside specific folders. To help the user with repurposing the same scripts, this repository contains an example of the folder structure (with empty folders).
 
+Table of Contents:
+- [Setup](#setup)
+- [Basecall ONT reads](#basecall-ont-with-guppy)
+- [Trim Illumina reads](#remove-illumina-adapters-with-trimgalore)
+- [Estimate genome size](#estimate-genome-size-with-jellyfish)
+- [Assemble with Flye](#genome-assembly-of-ont-data-with-flye)
+- [Polish with long reads](#polish-with-long-reads)
+- [Remove haplotigs](#remove-haplotigs-with-purge_dups)
+- [Polish with short reads](#polish-with-short-reads-using-hypo)
+- [Check contamination](#check-contamination-with-blobtools)
+- [Scaffold with Hi-C data](#scaffold-assembly-with-hic-data)
+- [QC with BUSCO](#check-assembly-quality-with-busco)
+
 
 ## Setup
 
@@ -238,7 +251,7 @@ sbatch --array=1 ../../../../scripts/purgedups.sh medaka/consensus.fasta
 ```
 
 
-## Polish with short reads - HyPo
+## Polish with short reads using HyPo
 
 Hybrid Polisher, uses short reads within a single run to polish a long reads assembly of small and large genomes. The requirement is that those reads should be highly accurate (>98% accuracy).
 
@@ -459,7 +472,7 @@ grep -c ">" decontaminated.fasta
 ```
 
 
-## Scaffold assembly with Hi-C data
+## Scaffold assembly with HiC data
 
 Arima protocol for mapping Hi-C reads to an assembly: https://github.com/ArimaGenomics/mapping_pipeline/blob/master/Arima_Mapping_UserGuide_A160156_v02.pdf
 <br>Then use YaHS to scaffold.
