@@ -370,26 +370,14 @@ wget -q -O nematoda_odb10.gz "https://busco-data.ezlab.org/v5/data/lineages/nema
 
 ### Installation with Docker
 
-Both the full instalation above and the docker version work when running the regular blobtool commands. I only used the docker for the View Blob step below. In any case, here are the instructions of how to install and use an example command.
+The installation above was used for most blobtool commands, except for the View step, which was giving an error related to npm. So I installed the Docker version of Blobtools as well, which was only used for the View step.
 
-On Harvard Cannon cluster, get container with:
+Installation on the Harvard Cannon cluster, get container with:
 ```bash
 singularity pull --disable-cache docker://genomehubs/blobtoolkit:2.6.5
 # Test simple commands:
 singularity exec --cleanenv blobtoolkit_2.6.5.sif blobtools -h
 singularity exec --cleanenv blobtoolkit_2.6.5.sif blobtools -v
-```
-
-Example of how to run the docker version:
-```bash
-# This runs fine! meta.json has all info in config file, but is not using paths. When I try the same, but without the --taxdump argument, it fails because doesn't find taxdump…
-singularity exec --cleanenv blobtoolkit_2.6.5.sif blobtools create \
-    --threads $THREADS \
-    --fasta $DATA_DIR/Nectonema_munidae-DNA05827.fasta \
-    --meta $DATA_DIR/config.yaml \
-    --taxid 190569 \
-    --taxdump /n/holylfs04/LABS/giribet_lab/Lab/tauanajc/scripts/blobtoolkit/blob_databases/taxdump_2021_07 \
-    $DATA_DIR/BlobDir
 ```
 
 ### Build up BlobDir
@@ -418,7 +406,7 @@ sbatch --array=1 ../../../../scripts/blobtools.sh <taxid>
 
 https://blobtoolkit.genomehubs.org/blobtools2/blobtools2-tutorials/opening-a-dataset-in-the-viewer/
 
-View step was giving error in my installation of blobtools2, something about npm. But docker version worked without any issues.
+Using docker installation for this step.
 
 - From inside **assemblies/Acutogordius_australiensis-MCZ152393/flye/blobtools**:
 ```bash
@@ -460,7 +448,7 @@ bioawk -t -c fastx '{ print $name, $seq }' hypo/whole_genome.h.fa | grep "contig
 
 ### Remove contaminants
 
-After inspecting blob plots, decide on which to remove from assembly as possible contaminands, and put contig names in a text file *contigs-to-exclude.txt* inside **assemblies/Acutogordius_australiensis-MCZ152393/flye/blobtools** folder to remove with `bioawk`.
+After inspecting blob plots, decide on which contig to remove from assembly as possible contaminants, and put contig names in a text file *contigs-to-exclude.txt* inside **assemblies/Acutogordius_australiensis-MCZ152393/flye/blobtools** folder to remove with `bioawk`.
 
 ```bash
 bioawk -cfastx 'BEGIN{while((getline k <"contigs-to-exclude.txt")>0)i[k]=1}{if(!(i[$name]))print ">"$name"\n"$seq}' ../hypo/whole_genome.h.fa > decontaminated.fasta
