@@ -6,15 +6,15 @@ Script calls in this pipeline are often made from inside specific folders. To he
 
 Table of Contents:
 - [Setup](#setup)
-- [Basecall ONT reads](#basecall-ont-with-guppy)
-- [Trim Illumina reads](#remove-illumina-adapters-with-trimgalore)
-- [Estimate genome size](#estimate-genome-size-with-jellyfish)
-- [Assemble with Flye](#genome-assembly-of-ont-data-with-flye)
-- [Polish with long reads](#polish-with-long-reads)
-- [Remove haplotigs](#remove-haplotigs-with-purge_dups)
-- [Polish with short reads](#polish-with-short-reads-using-hypo)
-- [Check contamination](#check-contamination-with-blobtools)
-- [Scaffold with Hi-C data](#scaffold-assembly-with-hic-data)
+- [Basecall ONT reads with Guppy](#basecall-ont-with-guppy)
+- [Trim Illumina reads with TrimGalore](#remove-illumina-adapters-with-trimgalore)
+- [Estimate genome size with Jellyfish and GenomeScope](#estimate-genome-size-with-jellyfish)
+- [Genome Assembly with Flye](#genome-assembly-of-ont-data-with-flye)
+- [Polish with long reads - Racon & Medaka](#polish-with-long-reads)
+- [Remove haplotigs with purge_dups](#remove-haplotigs-with-purge_dups)
+- [Polish with short reads - HyPo](#polish-with-short-reads-using-hypo)
+- [Check contamination with BlobTools](#check-contamination-with-blobtools)
+- [Scaffold assembly with Hi-C data](#scaffold-assembly-with-hic-data)
 - [QC with BUSCO](#check-assembly-quality-with-busco)
 
 
