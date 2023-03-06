@@ -12,7 +12,7 @@
 source activate genomes
 
 spp_dir=$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../spp-names)
-outfolder=flye-5kbp
+outfolder=flye
 
 cd $spp_dir
 
