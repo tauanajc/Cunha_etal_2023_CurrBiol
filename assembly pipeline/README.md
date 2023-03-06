@@ -81,8 +81,7 @@ sbatch --array=1 ../../scripts/basecall.sh ../fast5-symlinks/Acutogordius_austra
 
 Plots for quality scores, lengths etc. of fastq files.
 
-https://github.com/wdecoster/nanoplot<br>
-https://academic.oup.com/bioinformatics/article/34/15/2666/4934939
+https://github.com/wdecoster/nanoplot
 
 - From specific **taxon_folder** within **basecalled-ont**:
 
