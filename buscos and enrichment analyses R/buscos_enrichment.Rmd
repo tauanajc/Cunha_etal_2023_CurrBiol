@@ -5,7 +5,7 @@ date: "February 2023"
 output:
   html_notebook:
     code_folding: none
-    highlight: tango #default, tango, pygments, kate, monochrome, zenburn, textmate
+    highlight: tango
     toc: true
     toc_float:
       collapsed: false
@@ -25,8 +25,8 @@ library(tidyverse)
 ## Busco data
 Load busco results:
 ```{r}
-acutogordius_hic <- read_tsv("../results/busco545-Nematomorpha/out_metazoa_odb10/Acutogordius_australiensis-152393-HiC.fa/run_metazoa_odb10/full_table.tsv", skip = 2)
-nectonema_draft <- read_tsv("../results/busco545-Nematomorpha/out_metazoa_odb10/Nectonema_munidae-DNA05827-Draft.fa/run_metazoa_odb10/full_table.tsv", skip = 2)
+acutogordius_hic <- read_tsv("full_table-Acutogordius_australiensis.tsv", skip = 2)
+nectonema_draft <- read_tsv("full_table-Nectonema_munidae.tsv", skip = 2)
 ```
 
 Join all in one data frame:
@@ -41,7 +41,7 @@ Set of all 954 Metazoa buscos:
 ```{r}
 metazoa_genes <- buscos %>% pull(BuscoID) %>% unique()
 #write_csv2(as.data.frame(metazoa_genes),
-#           file = "../data/metazoa_buscos.csv", col_names = F)
+#           file = "metazoa_buscos.csv", col_names = F)
 ```
 
 ## Exploratory plots
@@ -125,7 +125,7 @@ Hypergeometric enrichment (= simple enrichment or over-representation analysis) 
 Start with loading the data we got with a custom python script (buscos_to_GO.py) that retrieves GO ids/terms from the OrthoDB v10 based on the list of all 954 Metazoan Busco IDs. Then filter only for GO terms (there are interpro and other lines there too).
 The terms themselves were not complete (NA for unclassified GOs), and even those do have classification if you look them up in https://www.ebi.ac.uk/QuickGO/, so here we will only keep the original BuscoID and the GO ids retrieved with the python script. We will use the package GO.db in the following step to get all GO terms and their ontology classification from each GO id.
 ```{r}
-buscos_GOs <- read_csv("../data/metazoa_buscos_GOterms.csv") %>%
+buscos_GOs <- read_csv("metazoa_buscos_GOterms.csv") %>%
   filter(grepl("GO:", name)) %>%
   filter(!obsolete_term) %>%
   select(BuscoID = orthodb_id, GOID = id, ancestor_terms,
@@ -228,7 +228,7 @@ Count = k, number of annotated missing buscos.
 
 Save supplementary table with significant terms:
 ```{r}
-bind_rows(enriched) %>% write_csv(., file = "../results/EnrichedGOterms.csv")
+bind_rows(enriched) %>% write_csv(., file = "EnrichedGOterms.csv")
 ```
 
 Expand column with which BUSCOs are annotated to each GO term, so that we can count how many unique BUSCOs were significant:
