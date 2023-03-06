@@ -448,7 +448,7 @@ bioawk -t -c fastx '{ print $name, $seq }' hypo/whole_genome.h.fa | grep "contig
 
 ### Remove contaminants
 
-After inspecting blob plots, decide on which contig to remove from assembly as possible contaminants, and put contig names in a text file *contigs-to-exclude.txt* inside **assemblies/Acutogordius_australiensis-MCZ152393/flye/blobtools** folder to remove with `bioawk`.
+After inspecting blob plots, decide on which contigs to remove from assembly as possible contaminants, and put contig names in a text file *contigs-to-exclude.txt* inside **assemblies/Acutogordius_australiensis-MCZ152393/flye/blobtools** folder to remove with `bioawk`.
 
 ```bash
 bioawk -cfastx 'BEGIN{while((getline k <"contigs-to-exclude.txt")>0)i[k]=1}{if(!(i[$name]))print ">"$name"\n"$seq}' ../hypo/whole_genome.h.fa > decontaminated.fasta
@@ -502,7 +502,7 @@ STEP 4: We then add read groups to this BAM file using Picard Tools.
 - From inside **assemblies/Acutogordius_australiensis-MCZ152393/flye**:
 
 ```bash
-# get list of HiC fastq file names and save in file inside hic folder - CHANGE NAME OF TAXA
+# get list of raw HiC fastq file names and save in file inside hic folder
 \ls /PATH/TO/RAW/HIC/READS/HiC-Acutogordius_australiensis_MCZ152393_S6_L00* | rev | cut -d/ -f 1 | cut -d_ -f3- | rev | uniq > hic/fastq-names-hic.txt
 
 # run
@@ -564,8 +564,6 @@ busco --list-datasets
 ```
 
 [I was getting error "ERROR:busco.BuscoRunner Metaeuk did not recognize any genes matching the dataset" with HiC assembly only. Apparently issue with memory, even though log files do not indicate that. Based on seeing other people mention memory issues and trying to accomodate with metaeuk flag, I simply gave a lot of memory to the job (184GB), and it ran correctly.]
-
-Of interest: metazoa_odb10, eukaryota_odb10
 
 - From **assemblies** folder:
 ```bash
