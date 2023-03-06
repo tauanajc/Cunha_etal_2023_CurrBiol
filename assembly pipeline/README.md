@@ -1,8 +1,9 @@
 # Genome Assembly
 
-Pipeline for genome assembly.
+Pipeline for genome assembly, with reference links to software and information.
 
-In the instructions below, script calls are often made from inside specific folders. To help the user with repurposing the same scripts, this repository contains an example of the folder structure (with empty folders).
+Script calls in this pipeline are often made from inside specific folders. To help the user with repurposing the same scripts, this repository contains an example of the folder structure (with empty folders).
+
 
 ## Setup
 
@@ -26,7 +27,6 @@ Inside the *genomes* project folder, I keep a simple text file (spp\_names) with
 Acutogordius_australiensis-MCZ152393
 Nectonema_munidae-MCZ153622
 ```
-
 
 ### Python environment
 
