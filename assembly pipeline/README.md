@@ -128,8 +128,7 @@ Polishing is performed as the final assembly stage. By default, Flye runs one po
 - In **assemblies** folder: (output folder name can be edited inside script)
 
 ```bash
-sbatch --array=1 ../../scripts/flye.sh PATH_TO_FASTQ_FOLDER
-# example path ../basecalled-ont/Acutogordius_australiensis-MCZ152393/fastq
+sbatch --array=1 ../../scripts/flye.sh ../basecalled-ont/Acutogordius_australiensis-MCZ152393/fastq
 ```
 
 Main output files are:
@@ -178,10 +177,10 @@ Racon takes as input only three files: contigs in FASTA/FASTQ format, reads in F
 
 The step below, medaka, was trained with non-default parameters of racon, so we set the same parameters to have similar error profiles. The effect of deviating from this prescription has not been explored with recent basecallers, and it may well be the case that medaka is not overly sensitive to changes to these values ([reference](https://nanoporetech.github.io/medaka/draft_origin.html#recommendations)).
 
-- In specific assembly folder (**assemblies/spp_folder/flye**):
+- From inside **assemblies/Acutogordius_australiensis-MCZ152393/flye**:
 
 ```bash
-sbatch --array=1 PATH_TO_scripts/racon.sh <assembly-file>
+sbatch --array=1 ../../../../scripts/racon.sh assembly.fasta
 # Less than 10 min on Acutogordius flye assembly
 ```
 
