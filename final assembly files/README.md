@@ -1,1 +1,0 @@
-# Assembly and annotation files
