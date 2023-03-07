@@ -11,5 +11,3 @@ The assemblies were built with long reads from Oxford Nanopore Technologies, and
 [Assembly Pipeline](assembly%20pipeline): instructions and scripts used to assemble genomes.
 
 [BUSCO and Enrichment Analyses](buscos%20and%20enrichment%20analyses%20R): R code for busco comparison, enrichment analyses, and related figures.
-
-[Final Assembly Files](final%20assembly%20files): Final assemblies and annotation files for the genomes of *Acutogordius australiensis* and *Nectonema munidae*.
