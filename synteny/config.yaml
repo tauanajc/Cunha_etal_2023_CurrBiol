@@ -1,0 +1,36 @@
+ignore_autobreaks: True       # Skip steps to find breaks in synteny blocks
+diamond_or_blastp: "diamond"  # "diamond" or "blastp"
+plot_LGs: True                # Plot the ALGs based on the installed databases
+plot_sp_sp: True              # Plot the synteny between two species, if False just generates .rbh files
+
+species:
+  Nmunidae:
+    proteins: /home/FM/tcunha/nematomorpha-synteny/data/Nectonema_munidae/Nectonema_munidae-MCZ153622-proteins.fa
+    chrom: /home/FM/tcunha/nematomorpha-synteny/data/Nectonema_munidae/Nectonema_munidae-MCZ153622.chrom
+    genome: /home/FM/tcunha/nematomorpha-synteny/data/Nectonema_munidae/Nectonema_munidae-MCZ153622-assembly.fa
+    genus: "Nectonema"
+    species: "munidae"
+  Celegans:
+    proteins: /home/FM/tcunha/nematomorpha-synteny/data/GCF_000002985.6_WBcel235_Caenorhabditis_elegans/GCF_000002985.6_WBcel235_protein.faa.gz
+    chrom: /home/FM/tcunha/nematomorpha-synteny/data/GCF_000002985.6_WBcel235_Caenorhabditis_elegans/Caenorhabditis_elegans.chrom
+    genome: /home/FM/tcunha/nematomorpha-synteny/data/GCF_000002985.6_WBcel235_Caenorhabditis_elegans/GCF_000002985.6_WBcel235_genomic.fna.gz
+    genus: "Caenorhabditis" # This is an optional field
+    species: "elegans" # This is an optional field
+    plotorder:    # This optional field tells the software to only plot the scaffolds
+      - "I"       #  listed here, and to do it in this order. This is useful for plotting
+      - "II"      #  comparisons between two species where you want a specific order for
+      - "III"     #  both species.
+      - "IV"
+      - "V"
+      - "X" 
+  Aaustraliensis:
+    proteins: /home/FM/tcunha/nematomorpha-synteny/data/Acutogordius_australiensis/Acutogordius_australiensis-MCZ152393-proteins.fa
+    chrom: /home/FM/tcunha/nematomorpha-synteny/data/Acutogordius_australiensis/Acutogordius_australiensis-MCZ152393.chrom
+    genome: /home/FM/tcunha/nematomorpha-synteny/data/Acutogordius_australiensis/Acutogordius_australiensis-MCZ152393-assembly.fa
+    plotorder:    # This optional field tells the software to only plot the scaffolds
+      - "scaffold_1"       #  listed here, and to do it in this order. This is useful for plotting
+      - "scaffold_2"      #  comparisons between two species where you want a specific order for
+      - "scaffold_3"     #  both species.
+      - "scaffold_4"
+    genus: "Acutogordius" # This is an optional field
+    species: "australiensis" # This is an optional field
