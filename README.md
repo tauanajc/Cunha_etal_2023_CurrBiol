@@ -10,6 +10,10 @@ The assemblies were built with long reads from Oxford Nanopore Technologies, and
 
 [Assembly Pipeline](assembly%20pipeline): instructions and scripts used to assemble genomes.
 
+[Annotation](annotation): scripts used to annotate genomes.
+
 [BUSCO and Enrichment Analyses](buscos%20and%20enrichment%20analyses%20R): R code for busco comparison, enrichment analyses, and related figures.
 
-[Synteny Plot](synteny): instructions and scripts for synteny analysis and plotting
+[Synteny Plot](synteny): instructions and scripts for synteny analysis and plotting.
+
+[Non-coding Distances](non-coding%distances): R code for comparison of intron sizes and intergenic distances.
