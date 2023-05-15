@@ -1,0 +1,359 @@
+---
+title: "Introns & Intergenic"
+author: Tauana J. Cunha
+date: "April 2023"
+output:
+  html_notebook:
+    code_folding: none
+    highlight: tango
+    toc: true
+    toc_float:
+      collapsed: false
+---
+
+```{r}
+.libPaths(new = "libR/")
+library(tidyverse)
+library(RColorBrewer)
+library(cowplot)
+library(patchwork)
+options(scipen=100000)
+```
+
+# Annotation data
+Load Nematomorpha annotation files.
+During import, gene and transcript ids in the first two lines of each gene (where type == gene or transcript) are NA (because original gtf file does not have the words gene_id and transcript_id in the feature column). As a workaround, I created a copy of the annotation file, and in BBEdit added the necessary text so that these lines are also properly parsed. The replacements were:
+Find: (g[0-9]+)(\.t\d{1}$)    Replace: transcript_id "\1\2"; gene_id "\1";
+Find: (g[0-9]+$)              Replace: gene_id "\1"
+```{r}
+AAU_gtf <- rtracklayer::import('../results/annotation/Acutogordius_australiensis/braker/augustus.hintsEDITED.gtf') %>% as_tibble() %>% mutate(species = "A. australiensis", i = 1:n())
+
+NMU_gtf <- rtracklayer::import('../results/annotation/Nectonema_munidae/braker/augustus.hintsEDITED.gtf') %>% as_tibble() %>% mutate(species = "N. munidae", i = 1:n())
+```
+
+Load data from NCBI assemblies:
+```{r}
+CEL_gtf <- rtracklayer::import('../data/GCF_000002985.6_WBcel235_Caenorhabditis_elegans/GCF_000002985.6_WBcel235_genomic.gtf.gz') %>% as_tibble() %>% mutate(species = "C. elegans", i = 1:n())
+
+DME_gtf <- rtracklayer::import('../data/GCA_000001215.4_Release_6_plus_ISO1_MT_Drosophila_melanogaster/GCF_000001215.4_Release_6_plus_ISO1_MT_genomic.gtf.gz') %>% as_tibble() %>% mutate(species = "D. melanogaster", i = 1:n())
+
+PPA_gtf <- rtracklayer::import('../data/GCA_000180635.4_El_Paco_v._4_Pristionchus_pacificus/GCA_000180635.4_El_Paco_v._4_genomic.gtf.gz') %>% as_tibble() %>% mutate(species = "P. pacificus", i = 1:n())
+
+ILI_gtf <- rtracklayer::import('../data/GCA_001642005.1_IntLin1.0_Intoshia_linei/GCA_001642005.1_IntLin1.0_genomic.gtf.gz') %>% as_tibble() %>% mutate(species = "I. linei", i = 1:n())
+
+ACA_gtf <- rtracklayer::import('../data/GCA_009735665.1_ACgenome_NGS_v2_Angiostrongylus_cantonensis/GCA_009735665.1_ACgenome_NGS_v2_genomic.gtf.gz') %>% as_tibble() %>% mutate(species = "A. cantonensis", i = 1:n())
+
+LLO_gtf <- rtracklayer::import('../data/GCF_000183805.2_Loa_loa_V3.1/GCF_000183805.2_Loa_loa_V3.1_genomic.gtf.gz') %>% as_tibble() %>% mutate(species = "L. loa", i = 1:n())
+
+SHA_gtf <- rtracklayer::import('../data/GCF_000699445.3_UoM_Shae.V3_Schistosoma_haematobium/GCF_000699445.3_UoM_Shae.V3_genomic.gtf.gz') %>% as_tibble() %>% mutate(species = "S. haematobium", i = 1:n())
+
+SME_gtf <- rtracklayer::import('../data/schmidtea_mediterranea.PRJNA12585.WBPS18.annotations.gff3.gz') %>% as_tibble() %>%
+  mutate(species = "S. mediterranea", i = 1:n()) %>%
+  rename(gene_biotype = biotype) %>%
+  mutate(type = if_else(type == "mRNA", "transcript", type),
+         gene_id = word(ID, 2, sep = fixed(":")),
+         gene_id = if_else(type == "exon", str_remove(gene_id, "\\.[0-9]+$"), gene_id),
+         transcript_id = gene_id) %>%
+  select(seqnames, start, end, width, strand, source, type, score, phase,
+         gene_id, transcript_id, gene_biotype, species, i)
+```
+
+Check that all genomes from NCBI have protein coding labels in the gene_biotype column:
+```{r}
+list(CEL_gtf, DME_gtf, PPA_gtf, ILI_gtf, ACA_gtf, LLO_gtf, SHA_gtf, SME_gtf) %>%
+  purrr::map(~'protein_coding' %in% .x$gene_biotype)
+```
+
+Data frame for labeling graphs, with species ordered by target hairworms, then other Ecdyso parasites, then free-living ecdysozoans, then spiralians:
+```{r}
+spp_data = data.frame(species = factor(list(AAU_gtf, NMU_gtf, ACA_gtf, LLO_gtf, PPA_gtf, CEL_gtf,
+                                            DME_gtf, SME_gtf, SHA_gtf, ILI_gtf) %>%
+                         purrr::map(~pull(.x, species) %>% unique) %>% unlist, ordered = T),
+                      lifestyle = c(rep("Parasitic", 4), rep("Free-living", 4), rep("Parasitic", 2)),
+                      clade = c(rep("Ecdysozoa", 7), rep("Spiralia", 3)),
+                      target = c(rep("Nematomorpha", 2), rep("Others", 8)))
+spp_data
+```
+
+# Wrangle data
+Create main dataframe with all annotation data from all species. From NCBI assemblies, retain only protein coding genes (original gtf files have lots of other stuff too, e.g. snoRNAs etc):
+```{r}
+gtf_all = list(CEL_gtf, DME_gtf, PPA_gtf, ILI_gtf, ACA_gtf, LLO_gtf, SME_gtf, SHA_gtf) %>%
+  purrr::map(~filter(.x, gene_biotype == "protein_coding") %>%
+               select(species, gene_id) %>%
+               left_join(.x) %>%
+               select(1:12, i)) %>% #remove extra columns from NCBI
+  bind_rows(AAU_gtf, NMU_gtf) %>% #combine with nematomorph annotation
+  filter(!type == "intron") %>%
+  left_join(spp_data) %>% #join traits for labeling graphs
+  mutate(species = factor(species, spp_data$species, ordered = T)) %>%
+  arrange(species, i)
+gtf_all
+```
+
+Retain only longest transcript per gene:
+```{r}
+gtf_longest = gtf_all %>%
+  group_by(species, gene_id) %>%
+  filter(type == "transcript") %>%
+  slice_max(width, with_ties = F) %>%
+  select(species, gene_id, transcript_id) %>% #duplicated %>% any # check unique combination
+  left_join(gtf_all) %>%
+  rowwise() %>%
+  mutate(minpos = min(start,end),
+         maxpos = max(start,end)) %>%
+  ungroup() %>%
+  arrange(species, i)
+gtf_longest
+```
+
+Calculate intergenic distances:
+```{r}
+intergenic = gtf_longest %>%
+  filter(type == "transcript") %>%
+  arrange(species, seqnames, minpos) %>%
+  group_by(species, seqnames) %>%
+  mutate(intergenic = minpos-lag(maxpos)+1) %>%
+  mutate(intergenic = if_else(intergenic<0, 0, intergenic))
+  #select(seqnames, start, end, strand, type, transcript_id, intergenic, species)
+intergenic #%>% tail(100)
+```
+
+NCBI files don't come with lines for introns, so calculate intron sizes based on interval between exons:
+```{r}
+introns = gtf_longest %>%
+  filter(type == "exon") %>%
+  arrange(species, seqnames, minpos) %>%
+  group_by(species, transcript_id) %>%
+  mutate(intron_size = minpos-lag(maxpos)+1) %>%
+  ungroup
+introns
+```
+
+Count number of exons per transcript, then remove one to calculate number of introns:
+```{r}
+Nintrons = introns %>%
+  group_by(species, transcript_id) %>%
+  summarise(Nintrons = n()-1,
+            TotalIntronLength = sum(intron_size, na.rm = T),
+            ProtSize = round(sum(width)/3,2)) %>%
+  ungroup %>%
+  left_join(spp_data %>% mutate(species = as.character(species)), by = 'species') %>%
+  mutate(species = factor(species, spp_data$species, ordered = T))
+Nintrons
+```
+
+
+# Summary stats
+Number of genes in each genome: (values seem about right, Orthonectida with ~9k genes, Drosophila with ~14k, C. elegans with >20k, S. mediterranea ~30k [https://academic.oup.com/nar/article/36/suppl_1/D599/2505816?login=true])
+```{r}
+sum_stats = gtf_longest %>%
+  group_by(species) %>%
+  summarise(Genes = sum(type == "transcript")) %>%
+  left_join(introns %>%
+              group_by(species) %>%
+              summarize(Exons = sum(type == "exon"),
+                        Introns = sum(!is.na(intron_size)), # count lines (n()) where not NA
+                        AvgIntronSize = mean(intron_size, na.rm = T),
+                        MaxIntronSize = max(intron_size, na.rm = T),
+                        AvgExonSize = mean(width),
+                        MaxExonSize = max(width))) %>%
+  mutate(IntronsPerGene = Introns / Genes) %>%
+  left_join(Nintrons %>%
+              group_by(species) %>%
+              summarise(SingleExonGenes = sum(Nintrons == 0),
+                        MaxSumIntronInGene = max(TotalIntronLength),
+                        MinProtSize = min(ProtSize),
+                        AvgProtSize = mean(ProtSize),
+                        MaxProtSize = max(ProtSize))) %>%
+  mutate(SingleExonPerc = SingleExonGenes/Genes*100)
+sum_stats
+```
+
+Number of genes with alternative transcripts:
+```{r}
+gtf_all %>%
+  filter(type == "transcript", species %in% c("A. australiensis", "N. munidae")) %>%
+  mutate(transcript = word(transcript_id, 2, sep = fixed("."))) %>%
+  group_by(species, transcript) %>%
+  summarise(N = n())
+```
+
+
+# Plot
+Intergenic distances:
+```{r}
+p_intergenic = intergenic %>%
+  filter(intergenic != 0) %>%
+  ggplot() +
+  geom_jitter(aes(x = intergenic, y = species, group = species,
+                  color = lifestyle), size = .2, height = .3, alpha = 0.02) +
+  geom_boxplot(aes(x = intergenic, y = species, group = species,
+                   color = lifestyle), outlier.shape = NA, alpha = 0.8) +
+  scale_y_discrete(limits=rev) + ylab("") +
+  scale_color_manual(values = c("gray40","salmon")) +
+  scale_x_log10(breaks=c(10, 100, 1000, 10000, 100000), #cut_si("bp")
+                labels = scales::label_number(scale_cut = scales::cut_short_scale())) +
+  theme_minimal() +
+  theme(axis.text.y = element_text(face = "italic", size = 7),
+        axis.text.x = element_text(size = 6), axis.title.x = element_text(size = 7),
+        plot.margin = unit(c(0, 0, 0, 0), "cm"),
+        legend.title = element_blank(), legend.background = element_blank(),
+        legend.position = 'none') + #c(.2, 0.7)
+  xlab("Intergenic distances (bp)")
+p_intergenic
+```
+
+Plot intron size:
+```{r}
+p_intronsize = introns %>%
+  ggplot() +
+  geom_jitter(aes(x = intron_size, y = species, group = species,
+                  color = lifestyle), size = .2, height = .3, alpha = 0.02) +
+  geom_boxplot(aes(x = intron_size, y = species, group = species,
+                   color = lifestyle), outlier.shape = NA, alpha = 0.8) +
+  scale_y_discrete(limits=rev) + ylab("") +
+  scale_color_manual(values = c("gray40","salmon")) +
+  
+  scale_x_log10(breaks=c(1, 10, 100, 1000, 10000,100000), #cut_si("bp")
+                labels = scales::label_number(scale_cut = scales::cut_short_scale())) +
+  theme_minimal() +
+  theme(axis.text.y = element_text(face = "italic", size = 7),
+        axis.text.x = element_text(size = 6), axis.title.x = element_text(size = 7),
+        plot.margin = unit(c(0, 0, 0, 0), "cm"),
+        legend.title = element_blank(), legend.background = element_blank(),
+        legend.position = 'none') + #c(.75, 0.7)
+  xlab("Intron length (bp)")
+p_intronsize
+```
+
+Plot number of introns per transcript:
+```{r}
+p_nintrons = Nintrons %>%
+  ggplot(aes(x = Nintrons, y = species)) +
+  geom_jitter(aes(color = lifestyle), size = .2, height = .3, alpha = 0.02) +
+  geom_boxplot(aes(color = lifestyle), outlier.shape = NA, alpha = 0.8) +
+  geom_text(data = Nintrons %>% group_by(species) %>%
+              summarise(avgNintrons = round(mean(Nintrons),1)),
+            aes(x= avgNintrons, y = species, label = avgNintrons), size = 2) +
+  xlab("Number of introns per gene") + ylab("") +
+  scale_color_manual(values = c("gray40","salmon")) + #gray75
+  
+  scale_x_continuous(trans = scales::log1p_trans(), breaks = c(0,1,2,5,10,100,500)) +
+  scale_y_discrete(limits=rev) +
+  theme_minimal() +
+  theme(legend.position = 'none',
+        plot.margin = unit(c(0, 0, 0, 0), "cm"),
+        axis.text.x = element_text(size = 6), axis.title.x = element_text(size = 7),
+        axis.text.y = element_text(face = "italic", size = 7))
+p_nintrons
+```
+
+Plot protein size per transcript:
+```{r}
+p_prot = Nintrons %>%
+  ggplot(aes(x = ProtSize, y = species)) +
+  geom_jitter(aes(color = lifestyle), size = .2, height = .3, alpha = 0.02) +
+  geom_boxplot(aes(color = lifestyle), outlier.shape = NA, alpha = 0.8) +
+  xlab("Protein size (aa)") + ylab("") +
+  scale_color_manual(values = c("gray40","salmon")) +
+  scale_x_continuous(trans = scales::log1p_trans(), breaks = c(10,100,350,1000,10000,60000),
+                labels = scales::label_number(scale_cut = scales::cut_short_scale())) +
+  scale_y_discrete(limits=rev) +
+  theme_minimal() +
+  theme(legend.position = 'none', #c(0.6,0.6)
+        plot.margin = unit(c(0, 0, 0, 0), "cm"),
+        axis.text.x = element_text(size = 6), axis.title.x = element_text(size = 7),
+        axis.text.y = element_text(face = "italic", size = 7))
+p_prot
+```
+
+Plot percentage of genes without any introns:
+```{r}
+sum_stats %>%
+  mutate(lifestyle = spp_data$lifestyle) %>%
+  ggplot() + geom_point(aes(x = species, y = SingleExonPerc, color = lifestyle)) +
+  xlab("") + ylab("Single exon genes (%)") +
+  scale_color_manual(values = c("gray40","salmon")) + #gray75
+  ylim(0,100) +
+  theme_minimal() +
+  theme(legend.position = 'none',
+        plot.margin = unit(c(0, 0, 0, 0), "cm"),
+        axis.text.x = element_text(size = 6), axis.title.x = element_text(size = 7),
+        axis.text.y = element_text(face = "italic", size = 7)) +
+  coord_flip()
+```
+
+
+# Scaffolds
+Load genome assemblies:
+```{r}
+AAU_fasta <- seqinr::read.fasta("../results/assemblies_annotations FIGSHARE/Acutogordius_australiensis-MCZ152393-assembly.fa", as.string = T)
+
+NMU_fasta <- seqinr::read.fasta("../results/assemblies_annotations FIGSHARE/Nectonema_munidae-MCZ153622-assembly.fa", as.string = T)
+```
+
+Scaffold stats (length, number of genes):
+```{r}
+scaffolds = gtf_longest %>%
+  filter(species %in% c("A. australiensis", "N. munidae")) %>%
+  droplevels() %>%
+  group_by(species, seqnames, .drop=F) %>% #
+  summarize(Ngenes = sum(type == "transcript")) %>%
+  right_join(data_frame(species = c(rep("A. australiensis",1323), rep("N. munidae",1061)),
+           seqnames = c(names(AAU_fasta), names(NMU_fasta)),
+           len = c(seqinr::getLength.list(AAU_fasta), seqinr::getLength.list(NMU_fasta)),
+           chromosome = c(T,T,T,T, rep(F,2380)))) %>%
+  mutate(species = factor(species, spp_data$species, ordered = T),
+         seqnames = factor(seqnames)) %>%
+  arrange(species, desc(Ngenes))
+scaffolds
+```
+
+Count of scaffolds with x number of genes:
+```{r}
+table(scaffolds %>% select(Ngenes))
+# 451 scaffolds with only one gene in Acutogordius
+```
+
+Plot scaffolds:
+```{r}
+p_scaffolds = scaffolds %>%
+  ggplot() +
+  geom_point(aes(x = len, y = Ngenes, color = chromosome),
+             alpha = .5, size = 1, show.legend = F) +
+  scale_color_manual(values = c("gray40","salmon")) +
+  scale_x_log10(labels = scales::label_number(scale_cut = scales::cut_short_scale())) + #scales::cut_si("bp")
+  scale_y_log10(position = "right") +
+  xlab("Scaffold length (bp)") + ylab("Number of genes in a scaffold") +
+  facet_wrap(~species, ncol=1) +
+  theme_minimal() +
+  theme(strip.text = element_blank(),
+        #plot.margin = unit(c(0, 0, 0, 0), "cm"),
+        #strip.text = element_text(face = "italic"),
+        axis.text = element_text(size = 6), axis.title = element_text(size = 7))
+p_scaffolds
+```
+
+
+# Figure paper
+Patchwork for empty space where synteny will go, then all other annotation plots:
+```{r}
+p_annotation = plot_spacer() + p_repeats + theme(axis.text.y = element_blank()) +
+  p_scaffolds + p_nintrons +
+  p_intronsize + theme(axis.text.y = element_blank()) +
+  p_intergenic + theme(axis.text.y = element_blank()) +
+  plot_annotation(tag_levels = list(c("B","C","D","E","F")))
+#p_annotation
+```
+
+```{r}
+ggsave("../figures/annotation/annotation.pdf", p_annotation,
+       width = 6.85, height = 5, units = "in", useDingbats = F)
+```
+
+```{r}
+ggsave("../figures/annotation/annotation.png", p_annotation,
+       width = 6.85, height = 5, units = "in", dpi = 1200)
+```
+
