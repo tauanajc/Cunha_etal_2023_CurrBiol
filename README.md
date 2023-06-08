@@ -1,6 +1,6 @@
 # Genome assembly and loss of universal genes in Nematomorpha
 
-This repository contains the scripts used to assemble and analyze the genomes of two nematomorph species. If you use this repository, please cite:
+This repository contains the scripts used to assemble and analyze the first two genomes of Nematomorpha. If you use this repository, please cite:
 
 Cunha TJ, De Medeiros BAS, Lord A, Sørensen MV, Giribet G. 2023. **Rampant loss of universal metazoan genes revealed by a chromosome-level genome assembly of the parasitic Nematomorpha**. Current Biology.
 
