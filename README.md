@@ -16,4 +16,4 @@ The assemblies were built with long reads from Oxford Nanopore Technologies, and
 
 [Synteny Plot](synteny): instructions and scripts for synteny analysis and plotting.
 
-[Non-coding Distances](noncoding%distances): R code for comparison of intron sizes and intergenic distances.
+[Non-coding Distances](noncoding%20distances): R code for comparison of intron sizes and intergenic distances.
