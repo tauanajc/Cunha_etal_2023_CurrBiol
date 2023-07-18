@@ -2,7 +2,7 @@
 
 This repository contains the scripts used to assemble and analyze the first two genomes of Nematomorpha. If you use this repository, please cite:
 
-Cunha TJ, De Medeiros BAS, Lord A, Sørensen MV, Giribet G. 2023. **Rampant loss of universal metazoan genes revealed by a chromosome-level genome assembly of the parasitic Nematomorpha**. Current Biology.
+Cunha TJ, de Medeiros BAS, Lord A, Sørensen MV, Giribet G. 2023. **Rampant loss of universal metazoan genes revealed by a chromosome-level genome assembly of the parasitic Nematomorpha**. Current Biology 33, https://doi.org/10.1016/j.cub.2023.07.003
 
 The assemblies were built with long reads from Oxford Nanopore Technologies, and with Illumina short reads from whole-genome and Hi-C libraries.
 
