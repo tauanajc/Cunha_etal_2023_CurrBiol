@@ -10,5 +10,5 @@ Code for comparison of missing BUSCOs between nematomorph species, enrichment an
 - `full_table.tsv`: Output files from [BUSCO](https://github.com/tauanajc/Cunha_etal_2023_CurrBiol/tree/main/assembly%20pipeline#check-assembly-quality-with-busco) used as inputs for the R script
 - `metazoa_buscos.csv`: List of all 954 metazoan BUSCO genes, created in the R script and used as input for the python script
 - `metazoa_buscos_GOterms.csv`: Output of the python script, used as input in the R script
-- `tableS1_EnrichedGOterms.csv`: Output of the R script with significant enriched GO terms (TableS1)
+- `tableS1_EnrichedGOterms.csv`: Output of the R script with significant enriched GO terms (TableS2)
 
